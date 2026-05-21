@@ -120,6 +120,7 @@ terraform.tfvars    → AWS 키 포함, 절대 커밋 금지
 
 | 레포 | 설명 |
 |------|------|
-| Medikong/infra | 인프라 구성 (현재) |
-| Medikong/services | 마이크로서비스 코드 |
-| Medikong/gitops | GitOps 배포 설정 |
+| [Medikong/infra](https://github.com/Medikong/infra) | 인프라 구성 (현재) |
+| [Medikong/service](https://github.com/Medikong/service) | 마이크로서비스 코드 |
+| [Medikong/gitops](https://github.com/Medikong/gitops) | GitOps 배포 설정 |
+| [Medikong/workspace](https://github.com/Medikong/workspace) | 팀 공통 |
