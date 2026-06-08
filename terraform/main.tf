@@ -126,21 +126,6 @@ resource "aws_instance" "worker" {
   })
 }
 
-# 서비스 이미지 저장소
-resource "aws_ecr_repository" "service" {
-  for_each = var.ecr_repositories
-
-  name         = "${local.name_prefix}-${each.key}"
-  force_delete = var.ecr_force_delete
-
-  image_tag_mutability = "MUTABLE"
-
-  tags = merge(local.common_tags, {
-    Name    = "${local.name_prefix}-${each.key}"
-    Service = each.key
-  })
-}
-
 # 외부 HTTP 진입점
 resource "aws_lb" "kong" {
   name               = "${local.name_prefix}-kong-nlb"
@@ -223,12 +208,6 @@ output "k8s_node_role_name" {
 
 output "k8s_node_instance_profile_name" {
   value = aws_iam_instance_profile.k8s_node.name
-}
-
-output "ecr_repository_urls" {
-  value = {
-    for name, repo in aws_ecr_repository.service : name => repo.repository_url
-  }
 }
 
 output "nlb_dns_name" {

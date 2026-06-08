@@ -21,18 +21,6 @@ volume_type        = "gp3"
 allowed_ssh_cidrs     = ["0.0.0.0/0"]
 allowed_k8s_api_cidrs = ["0.0.0.0/0"]
 
-ecr_repositories = [
-  "auth-service",
-  "patient-service",
-  "appointment-service",
-  "prescription-service",
-  "notification-service",
-  "dashboard",
-]
-
-# smoke workspace 테스트에서는 이미지가 남아 있어도 destroy가 가능하도록 true를 권장합니다.
-ecr_force_delete = true
-
 nlb_internal              = false
 nlb_listener_port         = 80
 nlb_target_port           = 80

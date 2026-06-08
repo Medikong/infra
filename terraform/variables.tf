@@ -82,25 +82,6 @@ variable "allowed_k8s_api_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "ecr_repositories" {
-  description = "프로젝트 서비스별 ECR repository 이름 목록"
-  type        = set(string)
-  default = [
-    "auth-service",
-    "patient-service",
-    "appointment-service",
-    "prescription-service",
-    "notification-service",
-    "dashboard",
-  ]
-}
-
-variable "ecr_force_delete" {
-  description = "repository 안에 이미지가 있어도 Terraform destroy 시 ECR repository를 삭제할지 여부"
-  type        = bool
-  default     = true
-}
-
 variable "nlb_internal" {
   description = "NLB를 내부용으로 만들지 여부. false면 인터넷-facing NLB입니다."
   type        = bool

@@ -4,6 +4,8 @@
 **/*.tfstate.*
 **/crash.log
 **/crash.*.log
+**/tfplan
+**/*.tfplan
 **/terraform.tfvars
 **/terraform.tfvars.json
 **/*.auto.tfvars
