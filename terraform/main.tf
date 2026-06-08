@@ -28,6 +28,10 @@ resource "aws_key_pair" "k8s_key" {
   key_name   = "${local.name_prefix}-k8s-key"
   public_key = file(var.public_key_path)
 
+  lifecycle {
+    ignore_changes = [public_key]
+  }
+
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-k8s-key"
   })
@@ -162,6 +166,10 @@ resource "aws_lb_listener" "kong_http" {
   load_balancer_arn = aws_lb.kong.arn
   port              = var.nlb_listener_port
   protocol          = "TCP"
+
+  lifecycle {
+    ignore_changes = [default_action]
+  }
 
   default_action {
     type             = "forward"
