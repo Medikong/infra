@@ -90,6 +90,7 @@ resource "aws_security_group" "k8s_sg" {
 resource "aws_instance" "master" {
   ami                    = var.ami_id
   instance_type          = var.master_instance_type
+  iam_instance_profile   = aws_iam_instance_profile.k8s_node.name
   key_name               = aws_key_pair.k8s_key.key_name
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
 
@@ -109,6 +110,7 @@ resource "aws_instance" "worker" {
   count                  = var.worker_count
   ami                    = var.ami_id
   instance_type          = var.worker_instance_type
+  iam_instance_profile   = aws_iam_instance_profile.k8s_node.name
   key_name               = aws_key_pair.k8s_key.key_name
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
   depends_on             = [aws_instance.master]
@@ -213,6 +215,14 @@ output "worker_private_ips" {
 
 output "security_group_id" {
   value = aws_security_group.k8s_sg.id
+}
+
+output "k8s_node_role_name" {
+  value = aws_iam_role.k8s_node.name
+}
+
+output "k8s_node_instance_profile_name" {
+  value = aws_iam_instance_profile.k8s_node.name
 }
 
 output "ecr_repository_urls" {

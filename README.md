@@ -37,7 +37,7 @@ infra/
 ```
 terraform apply
       ↓
-EC2 생성 (마스터 1 + 워커 2, ARM64 r6g, 서울 리전)
+EC2 생성 (마스터 1 + 워커 2, ARM64 r6g, 서울 리전, Kubernetes 노드용 IAM instance profile 연결)
       ↓
 Ansible bootstrap-servers
       ↓
@@ -84,6 +84,14 @@ terraform init
 terraform workspace new <이름>   # 팀원별 독립 환경
 terraform apply
 ```
+
+### AWS EBS CSI 전제
+
+aws-dev에서 관측성 PVC는 GitOps의 `medikong-aws-gp3` StorageClass를 통해 동적으로 생성한다. Terraform은 Kubernetes `StorageClass`, Loki/Tempo/Grafana/Prometheus PVC values, 정적 EBS volume/PV를 만들지 않는다.
+
+Terraform의 책임은 kubeadm 기반 EC2 노드가 EBS CSI driver를 통해 EBS volume을 생성하고 attach할 수 있도록 master/worker 공통 IAM instance profile을 연결하는 것이다. EC2 root volume의 `volume_type = "gp3"`는 노드 OS 디스크 설정이고, PVC용 gp3 StorageClass와는 별도이다.
+
+EBS CSI driver 설치와 StorageClass 적용은 Terraform 이후 ArgoCD Application/GitOps 단계에서 완료한다.
 
 ### 2. Ansible inventory 설정
 
