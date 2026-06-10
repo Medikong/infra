@@ -87,6 +87,8 @@ variable "default_kong_proxy_cidrs" {
   type        = list(string)
   default = [
     "175.197.126.56/32",
+    "115.138.39.169/32",
+    "172.30.112.1/32",
   ]
 }
 
