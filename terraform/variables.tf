@@ -82,6 +82,37 @@ variable "allowed_k8s_api_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "allowed_kong_proxy_cidrs" {
+  description = "Kong Proxy NodePort 접근을 허용할 CIDR 목록"
+  type        = list(string)
+  default     = []
+}
+
+variable "kong_proxy_node_port" {
+  description = "Kong Proxy NodePort"
+  type        = number
+  default     = 32407
+}
+
+variable "ecr_repositories" {
+  description = "서비스 이미지용 ECR repository 이름 목록"
+  type        = set(string)
+  default = [
+    "auth-service",
+    "concert-service",
+    "reservation-service",
+    "payment-service",
+    "ticket-service",
+    "notification-service",
+  ]
+}
+
+variable "ecr_force_delete" {
+  description = "ECR repository 삭제 시 이미지가 있어도 강제 삭제할지 여부"
+  type        = bool
+  default     = false
+}
+
 variable "nlb_internal" {
   description = "NLB를 내부용으로 만들지 여부. false면 인터넷-facing NLB입니다."
   type        = bool

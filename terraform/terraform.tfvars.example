@@ -21,6 +21,10 @@ volume_type        = "gp3"
 allowed_ssh_cidrs     = ["0.0.0.0/0"]
 allowed_k8s_api_cidrs = ["0.0.0.0/0"]
 
+# Kong Ingress 외부 접근용입니다. 실제 값은 본인 공인 IP/32만 넣으세요.
+kong_proxy_node_port    = 32407
+allowed_kong_proxy_cidrs = ["203.0.113.10/32"]
+
 nlb_internal              = false
 nlb_listener_port         = 80
 nlb_target_port           = 80

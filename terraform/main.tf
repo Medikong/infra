@@ -16,7 +16,7 @@ data "aws_vpc" "default" {
   default = true
 }
 
-/data "aws_subnets" "default" {
+data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
@@ -66,6 +66,16 @@ resource "aws_security_group" "k8s_sg" {
     protocol    = "tcp"
     cidr_blocks = var.allowed_k8s_api_cidrs
   }
+  # Kong Proxy NodePort. Keep the CIDR list narrow because this exposes Ingress routes.
+  dynamic "ingress" {
+    for_each = length(var.allowed_kong_proxy_cidrs) > 0 ? [1] : []
+    content {
+      from_port   = var.kong_proxy_node_port
+      to_port     = var.kong_proxy_node_port
+      protocol    = "tcp"
+      cidr_blocks = var.allowed_kong_proxy_cidrs
+    }
+  }
   # 노드간 통신
   ingress {
     from_port = 0
@@ -101,9 +111,9 @@ resource "aws_instance" "master" {
 
   user_data = <<-USERDATA
     #!/bin/bash
-    (crontab -l 2>/dev/null; echo "0 */10 * * * /bin/bash -c 'ECR_PASSWORD=\$(aws ecr get-login-password --region ap-northeast-2) && for ns in ticketing-auth ticketing-concert ticketing-reservation ticketing-payment ticketing-ticket ticketing-notification ticketing-dashboard; do kubectl delete secret ecr-registry -n \${ns} --ignore-not-found; kubectl create secret docker-registry ecr-registry --docker-server=941141115079.dkr.ecr.ap-northeast-2.amazonaws.com --docker-username=AWS --docker-password=\${ECR_PASSWORD} -n \${ns}; done'") | crontab -
+    (crontab -l 2>/dev/null; echo "0 */10 * * * /bin/bash -c 'ECR_PASSWORD=\$(aws ecr get-login-password --region ap-northeast-2) && for ns in ticketing-auth ticketing-concert ticketing-reservation ticketing-payment ticketing-ticket ticketing-notification ticketing-dashboard; do kubectl delete secret ecr-registry -n \$${ns} --ignore-not-found; kubectl create secret docker-registry ecr-registry --docker-server=941141115079.dkr.ecr.ap-northeast-2.amazonaws.com --docker-username=AWS --docker-password=\$${ECR_PASSWORD} -n \$${ns}; done'") | crontab -
   USERDATA
-  
+
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-master"
     Role = "master"
@@ -135,7 +145,7 @@ resource "aws_instance" "worker" {
 resource "aws_ecr_repository" "service" {
   for_each = var.ecr_repositories
 
-  name         = "${each.key}"
+  name         = each.key
   force_delete = var.ecr_force_delete
 
   image_tag_mutability = "MUTABLE"
