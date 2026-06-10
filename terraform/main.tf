@@ -10,11 +10,7 @@ locals {
     Project     = var.project_name
     Environment = terraform.workspace
   }
-  default_kong_proxy_cidrs = [
-    # Kong Ingress 팀 기본 허용 목록입니다. 고정 공인 IP는 /32로 여기에 추가합니다.
-    "175.197.126.56/32",
-  ]
-  kong_proxy_cidrs = distinct(concat(local.default_kong_proxy_cidrs, var.additional_kong_proxy_cidrs))
+  kong_proxy_cidrs = distinct(concat(var.default_kong_proxy_cidrs, var.additional_kong_proxy_cidrs))
 }
 
 data "aws_vpc" "default" {
