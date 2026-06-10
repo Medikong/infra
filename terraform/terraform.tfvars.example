@@ -27,5 +27,5 @@ additional_kong_proxy_cidrs = []
 
 nlb_internal              = false
 nlb_listener_port         = 80
-nlb_target_port           = 80
+nlb_target_port           = 32407
 nlb_health_check_protocol = "TCP"

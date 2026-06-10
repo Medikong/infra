@@ -136,7 +136,7 @@ variable "nlb_listener_port" {
 variable "nlb_target_port" {
   description = "NLB가 worker EC2로 전달할 포트"
   type        = number
-  default     = 80
+  default     = 32407
 }
 
 variable "nlb_health_check_protocol" {
