@@ -10,6 +10,11 @@ locals {
     Project     = var.project_name
     Environment = terraform.workspace
   }
+  default_kong_proxy_cidrs = [
+    # Kong Ingress 팀 기본 허용 목록입니다. 고정 공인 IP는 /32로 여기에 추가합니다.
+    "175.197.126.56/32",
+  ]
+  kong_proxy_cidrs = distinct(concat(local.default_kong_proxy_cidrs, var.additional_kong_proxy_cidrs))
 }
 
 data "aws_vpc" "default" {
@@ -68,12 +73,12 @@ resource "aws_security_group" "k8s_sg" {
   }
   # Kong Proxy NodePort. Keep the CIDR list narrow because this exposes Ingress routes.
   dynamic "ingress" {
-    for_each = length(var.allowed_kong_proxy_cidrs) > 0 ? [1] : []
+    for_each = length(local.kong_proxy_cidrs) > 0 ? [1] : []
     content {
       from_port   = var.kong_proxy_node_port
       to_port     = var.kong_proxy_node_port
       protocol    = "tcp"
-      cidr_blocks = var.allowed_kong_proxy_cidrs
+      cidr_blocks = local.kong_proxy_cidrs
     }
   }
   # 노드간 통신

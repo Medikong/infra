@@ -82,8 +82,8 @@ variable "allowed_k8s_api_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "allowed_kong_proxy_cidrs" {
-  description = "Kong Proxy NodePort 접근을 허용할 CIDR 목록"
+variable "additional_kong_proxy_cidrs" {
+  description = "기본 허용 목록 외에 추가로 Kong Proxy NodePort 접근을 허용할 CIDR 목록"
   type        = list(string)
   default     = []
 }
