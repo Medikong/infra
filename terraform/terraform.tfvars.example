@@ -22,10 +22,10 @@ allowed_ssh_cidrs     = ["0.0.0.0/0"]
 allowed_k8s_api_cidrs = ["0.0.0.0/0"]
 
 # Kong Ingress 외부 접근용입니다. 팀 기본 허용 IP는 variables.tf의 default_kong_proxy_cidrs에서 관리합니다.
-kong_proxy_node_port       = 32407
+kong_proxy_node_port        = 32407
 additional_kong_proxy_cidrs = []
 
 nlb_internal              = false
-nlb_listener_port         = 32407
+nlb_listener_port         = 80
 nlb_target_port           = 32407
 nlb_health_check_protocol = "TCP"

@@ -132,7 +132,7 @@ variable "nlb_internal" {
 variable "nlb_listener_port" {
   description = "NLB가 외부에서 받을 포트"
   type        = number
-  default     = 32407
+  default     = 80
 }
 
 variable "nlb_target_port" {
