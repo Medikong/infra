@@ -1,0 +1,170 @@
+---
+- name: Prepare private-dev Longhorn node storage prerequisites
+  hosts: control_plane
+  become: false
+  gather_facts: false
+  vars:
+    longhorn_data_path: /var/lib/longhorn
+    longhorn_packages_rhel:
+      - iscsi-initiator-utils
+      - nfs-utils
+      - util-linux
+    longhorn_required_commands:
+      - iscsiadm
+      - mount
+      - findmnt
+    longhorn_use_separate_disk: false
+
+  tasks:
+    - name: Assert longhorn node group exists
+      ansible.builtin.assert:
+        that:
+          - groups['longhorn_nodes'] is defined
+          - groups['longhorn_nodes'] | length > 0
+        fail_msg: longhorn_nodes group must contain the private-dev storage node.
+
+    - name: Check passwordless sudo on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item].private_dev_ssh_alias | default(item) }} \
+          "sudo -n true"
+      loop: "{{ groups['longhorn_nodes'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: longhorn_sudo_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Report Longhorn sudo requirement in check mode
+      ansible.builtin.debug:
+        msg: "{{ item.item }} does not allow passwordless sudo. Remediation that changes OS packages, directories, or services needs interactive sudo."
+      loop: "{{ longhorn_sudo_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0
+
+    - name: Check Longhorn package state on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item].private_dev_ssh_alias | default(item) }} \
+          "rpm -q {{ longhorn_packages_rhel | join(' ') }}"
+      loop: "{{ groups['longhorn_nodes'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: longhorn_package_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Show Longhorn package check result
+      ansible.builtin.debug:
+        msg: "{{ item.item }} package check rc={{ item.rc }} stdout={{ item.stdout | default('') }} stderr={{ item.stderr | default('') }}"
+      loop: "{{ longhorn_package_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Install Longhorn prerequisite packages on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item.item].private_dev_ssh_alias | default(item.item) }} \
+          "sudo dnf install -y {{ longhorn_packages_rhel | join(' ') }}"
+      loop: "{{ longhorn_package_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not ansible_check_mode
+        - item.rc != 0
+
+    - name: Check required Longhorn commands on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item].private_dev_ssh_alias | default(item) }} \
+          "for cmd in {{ longhorn_required_commands | join(' ') }}; do command -v \$cmd; done"
+      loop: "{{ groups['longhorn_nodes'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: longhorn_command_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Show required Longhorn command check result
+      ansible.builtin.debug:
+        msg: "{{ item.item }} command check rc={{ item.rc }} stdout={{ item.stdout | default('') }} stderr={{ item.stderr | default('') }}"
+      loop: "{{ longhorn_command_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Check Longhorn data directory on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item].private_dev_ssh_alias | default(item) }} \
+          "test -d {{ longhorn_data_path }}"
+      loop: "{{ groups['longhorn_nodes'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: longhorn_data_path_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Report Longhorn data directory plan in check mode
+      ansible.builtin.debug:
+        msg: "{{ item.item }} would create {{ longhorn_data_path }}"
+      loop: "{{ longhorn_data_path_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - ansible_check_mode
+        - item.rc != 0
+
+    - name: Prepare Longhorn data directory on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item.item].private_dev_ssh_alias | default(item.item) }} \
+          "sudo mkdir -p {{ longhorn_data_path }} && sudo chown root:root {{ longhorn_data_path }} && sudo chmod 0755 {{ longhorn_data_path }}"
+      loop: "{{ longhorn_data_path_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not ansible_check_mode
+        - item.rc != 0
+
+    - name: Check iscsid service state on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item].private_dev_ssh_alias | default(item) }} \
+          "systemctl is-enabled iscsid && systemctl is-active iscsid"
+      loop: "{{ groups['longhorn_nodes'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: longhorn_iscsid_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Show iscsid service check result
+      ansible.builtin.debug:
+        msg: "{{ item.item }} iscsid check rc={{ item.rc }} stdout={{ item.stdout | default('') }} stderr={{ item.stderr | default('') }}"
+      loop: "{{ longhorn_iscsid_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Enable and start iscsid on storage nodes
+      ansible.builtin.shell: |
+        set -eu
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ hostvars[item.item].private_dev_ssh_alias | default(item.item) }} \
+          "sudo systemctl enable --now iscsid"
+      loop: "{{ longhorn_iscsid_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not ansible_check_mode
+        - item.rc != 0
+
+    - name: Record separate disk decision
+      ansible.builtin.debug:
+        msg: >-
+          longhorn_use_separate_disk is {{ longhorn_use_separate_disk }}.
+          Keep {{ longhorn_data_path }} on the current root disk unless a dedicated disk is mounted before enabling Longhorn scheduling.

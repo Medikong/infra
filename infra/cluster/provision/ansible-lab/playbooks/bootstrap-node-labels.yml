@@ -1,0 +1,32 @@
+---
+- name: Prepare dedicated labels for private-dev nodes
+  hosts: control_plane
+  become: false
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Check node label changes on registered nodes
+      ansible.builtin.command:
+        cmd: kubectl label node {{ item }} {{ hostvars[item].node_labels }} --overwrite --dry-run=server -o name
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      loop: "{{ groups['k8s_cluster'] }}"
+      when:
+        - hostvars[item].node_labels is defined
+        - hostvars[item].node_labels | length > 0
+      changed_when: false
+      check_mode: false
+
+    - name: Apply node labels on registered nodes
+      ansible.builtin.command:
+        cmd: kubectl label node {{ item }} {{ hostvars[item].node_labels }} --overwrite
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      loop: "{{ groups['k8s_cluster'] }}"
+      when:
+        - not ansible_check_mode
+        - hostvars[item].node_labels is defined
+        - hostvars[item].node_labels | length > 0
+      changed_when: false
