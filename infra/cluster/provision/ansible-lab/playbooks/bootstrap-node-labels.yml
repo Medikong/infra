@@ -5,8 +5,27 @@
   gather_facts: false
   vars_files:
     - ../group_vars/all.yml
+  vars:
+    private_dev_removed_node_labels:
+      - medikong.io/storage-node
+      - node.longhorn.io/create-default-disk
 
   tasks:
+    - name: Remove deprecated Longhorn scheduling labels from registered nodes
+      ansible.builtin.command:
+        cmd: kubectl label node {{ item }} {{ private_dev_removed_node_labels | map('regex_replace', '$', '-') | join(' ') }} --overwrite
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      loop: "{{ groups['k8s_cluster'] }}"
+      register: deprecated_node_label_removal
+      failed_when:
+        - deprecated_node_label_removal.rc != 0
+        - "'not labeled' not in deprecated_node_label_removal.stderr"
+      changed_when:
+        - deprecated_node_label_removal.rc == 0
+        - "'not labeled' not in deprecated_node_label_removal.stderr"
+      check_mode: false
+
     - name: Check node label changes on registered nodes
       ansible.builtin.command:
         cmd: kubectl label node {{ item }} {{ hostvars[item].node_labels }} --overwrite --dry-run=server -o name
