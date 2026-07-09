@@ -34,6 +34,7 @@
           - kubectl
           - apply
           - --server-side
+          - --force-conflicts
           - -n
           - "{{ private_dev_argocd_namespace }}"
           - -f
