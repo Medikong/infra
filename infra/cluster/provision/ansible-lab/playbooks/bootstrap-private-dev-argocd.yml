@@ -33,6 +33,7 @@
         argv:
           - kubectl
           - apply
+          - --server-side
           - -n
           - "{{ private_dev_argocd_namespace }}"
           - -f
