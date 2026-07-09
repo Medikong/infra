@@ -7,6 +7,7 @@
 - 루트 `Taskfile.yml`은 개발자가 자주 쓰는 진입점을 소유 폴더로 위임하는 프록시 역할만 한다.
 - 루트 `Taskfile.yml`에는 환경별 접속 정보, 노드 IP, 사용자명, key path 같은 구현 설정을 두지 않는다.
 - 루트 프록시가 가리키는 소유 폴더의 `Taskfile.yml`을 이어서 읽고 실제 구현과 검증 명령을 확인한다.
+- 동일한 기능의 명령어에서  추가 인자를 받아야하는 경우  명렁어 수를 늘리지말고 `--` 뒤에 추가 인자를 붙여서 전달한다. (예: `task infra:cluster:provision:ansible-lab -- --limit node1`)
 
 ## 레포 폴더 구조
 
@@ -29,5 +30,5 @@
 
 - private-dev SSH/bootstrap 변경과 무관한 Terraform 또는 README 변경은 사용자가 명시하지 않는 한 같은 커밋에 포함하지 않는다.
 - 루트 Taskfile을 수정했다면 루트 `Taskfile.yml`을 다시 읽고 프록시 범위만 유지되는지 확인한다.
-- ansible-lab Taskfile을 수정했다면 `infra/cluster/provision/ansible-lab/Taskfile.yml`과 `configs/private-dev.yml`을 함께 확인한다.
+- ansible-lab Taskfile을 수정했다면 `infra/cluster/provision/ansible-lab/Taskfile.yml`과 `configs/private-dev.env`를 함께 확인한다.
 - 검증 명령은 문서에 적힌 예시보다 현재 Taskfile의 실제 task 정의를 우선한다.

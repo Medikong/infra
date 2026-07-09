@@ -1,54 +1,39 @@
 version: "3"
 
+dotenv:
+  - configs/private-dev.env
+
 vars:
   ANSIBLE_ROOT: "."
-  PRIVATE_DEV_CONFIG: "configs/private-dev.yml"
-  CLUSTER_ENV:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.env
-  SERVER_OS:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.server_os
-  ANSIBLE_INVENTORY:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.inventory
-  ANSIBLE_FLAGS:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.ansible_flags
-  RUN_PRIVATE_DEV_SECRETS:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.run_private_dev_secrets
-  RUN_ECR_SECRET:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.run_ecr_secret
-  PRIVATE_DEV_ARGOCD_NAMESPACE:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.namespace
-  PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.install_manifest_url
-  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.root_application_url
-  PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.server_ready_timeout
-  PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.controller_ready_timeout
-  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.root_application_name
-  PRIVATE_DEV_SSH_CONFIG:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.config_path
-  PRIVATE_DEV_SSH_KEY:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.key_path
-  PRIVATE_DEV_SSH_PASSPHRASE:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.passphrase
-  PRIVATE_DEV_SSH_USER:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.user
-  PRIVATE_DEV_NODE1_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.node1.host
-  PRIVATE_DEV_NODE1_PORT:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.node1.port
-  PRIVATE_DEV_NODE2_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.peers.node2
-  PRIVATE_DEV_NODE3_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.peers.node3
-  PRIVATE_DEV_NODE4_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.peers.node4
-  PRIVATE_DEV_NODE5_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.peers.node5
-  PRIVATE_DEV_NODE6_HOST:
-    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.peers.node6
+  PRIVATE_DEV_CONFIG: "configs/private-dev.env"
+  CLUSTER_ENV: '{{default "private-dev" .CLUSTER_ENV}}'
+  SERVER_OS: '{{default "el9" .SERVER_OS}}'
+  ANSIBLE_INVENTORY: '{{default "./inventories/lab/private-dev.ini" .ANSIBLE_INVENTORY}}'
+  ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
+  ANSIBLE_CONNECTION_ARGS: "{{if eq .CLUSTER_ENV \"private-dev\"}}--ssh-common-args='-F {{.PRIVATE_DEV_SSH_CONFIG}} -o StrictHostKeyChecking=accept-new'{{end}}"
+  ASK_BECOME_PASS: '{{default "true" .ASK_BECOME_PASS}}'
+  ANSIBLE_BECOME_ARGS: '{{if eq .ASK_BECOME_PASS "true"}}--ask-become-pass{{end}}'
+  RUN_PRIVATE_DEV_SECRETS: '{{default "false" .RUN_PRIVATE_DEV_SECRETS}}'
+  RUN_ECR_SECRET: '{{default "false" .RUN_ECR_SECRET}}'
+  PRIVATE_DEV_ARGOCD_NAMESPACE: '{{default "argocd" .PRIVATE_DEV_ARGOCD_NAMESPACE}}'
+  PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL: '{{default "https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml" .PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL}}'
+  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL: '{{default "https://raw.githubusercontent.com/TicketMong/gitops/main/argo/applications/private-dev/root.yaml" .PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL}}'
+  PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT: '{{default "300s" .PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT}}'
+  PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT: '{{default "300s" .PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT}}'
+  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME: '{{default "medikong-private-dev-apps" .PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME}}'
+  PRIVATE_DEV_LOCAL_DIR: '{{default ".local/private-dev" .PRIVATE_DEV_LOCAL_DIR}}'
+  PRIVATE_DEV_SSH_CONFIG: '{{default ".local/private-dev/ssh_config" .PRIVATE_DEV_SSH_CONFIG}}'
+  PRIVATE_DEV_SSH_SETUP_MARKER: '{{default ".local/private-dev/ssh-setup.ready" .PRIVATE_DEV_SSH_SETUP_MARKER}}'
+  PRIVATE_DEV_SSH_KEY: '{{default "~/.ssh/medikong-private-dev" .PRIVATE_DEV_SSH_KEY}}'
+  PRIVATE_DEV_SSH_PASSPHRASE: '{{default "" .PRIVATE_DEV_SSH_PASSPHRASE}}'
+  PRIVATE_DEV_SSH_USER: '{{default "lab-bum4496-833cff" .PRIVATE_DEV_SSH_USER}}'
+  PRIVATE_DEV_NODE1_HOST: '{{default "external.terminal-lab.kr" .PRIVATE_DEV_NODE1_HOST}}'
+  PRIVATE_DEV_NODE1_PORT: '{{default "41280" .PRIVATE_DEV_NODE1_PORT}}'
+  PRIVATE_DEV_NODE2_HOST: '{{default "10.0.3.45" .PRIVATE_DEV_NODE2_HOST}}'
+  PRIVATE_DEV_NODE3_HOST: '{{default "10.0.1.246" .PRIVATE_DEV_NODE3_HOST}}'
+  PRIVATE_DEV_NODE4_HOST: '{{default "10.0.2.233" .PRIVATE_DEV_NODE4_HOST}}'
+  PRIVATE_DEV_NODE5_HOST: '{{default "10.0.2.250" .PRIVATE_DEV_NODE5_HOST}}'
+  PRIVATE_DEV_NODE6_HOST: '{{default "10.0.3.196" .PRIVATE_DEV_NODE6_HOST}}'
 
 tasks:
   default:
@@ -84,6 +69,7 @@ tasks:
         printf 'ANSIBLE_ROOT=%s\n' '{{.ANSIBLE_ROOT}}'
         printf 'ANSIBLE_INVENTORY=%s\n' "${inventory}"
         printf 'SERVER_OS=%s\n' "${server_os}"
+        printf 'ASK_BECOME_PASS=%s\n' '{{.ASK_BECOME_PASS}}'
         printf 'RUN_PRIVATE_DEV_SECRETS=%s\n' '{{.RUN_PRIVATE_DEV_SECRETS}}'
         printf 'RUN_ECR_SECRET=%s\n' '{{.RUN_ECR_SECRET}}'
         printf 'PRIVATE_DEV_ARGOCD_NAMESPACE=%s\n' '{{.PRIVATE_DEV_ARGOCD_NAMESPACE}}'
@@ -102,7 +88,7 @@ tasks:
             *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
           esac
         fi
-        ansible {{.ANSIBLE_FLAGS}} -i "${inventory}" all -m ping
+        ansible {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i "${inventory}" all -m ping
 
   inventory:check:
     desc: Check environment inventory safety assumptions before bootstrap.
@@ -264,6 +250,16 @@ tasks:
           printf 'Run: task private-dev:ssh-keygen\n' >&2
           exit 2
         fi
+        if [ ! -f "${key}.pub" ]; then
+          printf 'Missing public key: %s.pub\n' "${key}" >&2
+          printf 'Run: task private-dev:ssh-keygen\n' >&2
+          exit 2
+        fi
+        fingerprint="$(ssh-keygen -lf "${key}.pub" | awk '{ print $2 }')"
+        if ssh-add -l 2>/dev/null | awk '{ print $2 }' | grep -Fx "${fingerprint}" >/dev/null; then
+          printf 'SSH key is already loaded in ssh-agent: %s\n' "${key}"
+          exit 0
+        fi
         ssh-add "${key}"
 
   private-dev:ssh-config-node1-peers:
@@ -327,18 +323,110 @@ tasks:
   private-dev:ssh-setup-all:
     desc: Setup local-to-node1 and node1-to-node2-node6 SSH aliases.
     cmds:
-      - task private-dev:ssh-ensure-node1
-      - task private-dev:ssh-agent-add
-      - task private-dev:ssh-copy-all
-      - task private-dev:ssh-config-node1-peers
+      - task private-dev:ssh-setup-cached VERBOSE='{{.VERBOSE | default "false"}}'
+
+  private-dev:ssh-cache-valid:
+    desc: Check whether private-dev SSH setup cache is valid.
+    cmds:
+      - |
+        set -eu
+        marker='{{.PRIVATE_DEV_SSH_SETUP_MARKER}}'
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        signature="$(
+          {
+            sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' '{{.PRIVATE_DEV_CONFIG}}'
+            if [ -f "${key}.pub" ]; then
+              cksum "${key}.pub"
+            fi
+          } | cksum | awk '{ print $1 ":" $2 }'
+        )"
+        if [ ! -f "${marker}" ]; then
+          printf 'private-dev SSH setup cache is missing: %s\n' "${marker}" >&2
+          exit 1
+        fi
+        cached="$(sed -n '1p' "${marker}")"
+        if [ "${cached}" != "${signature}" ]; then
+          printf 'private-dev SSH setup cache is stale: %s\n' "${marker}" >&2
+          exit 1
+        fi
+        printf 'private-dev SSH setup cache is valid: %s\n' "${marker}"
+
+  private-dev:ssh-cache-write:
+    desc: Write private-dev SSH setup cache after a successful setup.
+    cmds:
+      - |
+        set -eu
+        marker='{{.PRIVATE_DEV_SSH_SETUP_MARKER}}'
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        signature="$(
+          {
+            sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' '{{.PRIVATE_DEV_CONFIG}}'
+            if [ -f "${key}.pub" ]; then
+              cksum "${key}.pub"
+            fi
+          } | cksum | awk '{ print $1 ":" $2 }'
+        )"
+        mkdir -p "$(dirname "${marker}")"
+        printf '%s\n' "${signature}" > "${marker}"
+        chmod 0600 "${marker}"
+        printf 'Updated private-dev SSH setup cache: %s\n' "${marker}"
+
+  private-dev:ssh-setup-cached:
+    desc: Setup private-dev SSH once and skip when the local cache is still valid.
+    silent: true
+    cmds:
+      - |
+        set -eu
+        verbose='{{.VERBOSE | default "false"}}'
+        case "${verbose}" in
+          1|true|TRUE|yes|YES|on|ON) verbose=true ;;
+          *) verbose=false ;;
+        esac
+        run_task() {
+          if [ "${verbose}" = true ]; then
+            task "$@"
+          else
+            task --silent "$@" >/dev/null
+          fi
+        }
+        marker='{{.PRIVATE_DEV_SSH_SETUP_MARKER}}'
+        if task private-dev:ssh-cache-valid >/dev/null 2>&1; then
+          if [ "${verbose}" = true ]; then
+            printf 'private-dev SSH setup already active: %s\n' "${marker}"
+          fi
+          exit 0
+        fi
+        run_task private-dev:ssh-ensure-node1
+        run_task private-dev:ssh-agent-add
+        run_task private-dev:ssh-copy-all
+        run_task private-dev:ssh-config-node1-peers
+        run_task private-dev:ssh-cache-write
 
   ssh:private-dev:
     desc: Ensure private-dev node1 key access, then open an interactive SSH session.
+    silent: true
     cmds:
-      - task private-dev:ssh-ensure-node1
-      - task private-dev:ssh-agent-add
-      - task private-dev:ssh-config-node1-peers
-      - ssh -A -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1
+      - |
+        set -eu
+        verbose='{{.VERBOSE | default "false"}}'
+        case "${verbose}" in
+          1|true|TRUE|yes|YES|on|ON) verbose=true ;;
+          *) verbose=false ;;
+        esac
+        if [ "${verbose}" = true ]; then
+          task private-dev:ssh-setup-cached VERBOSE=true
+          task private-dev:ssh-agent-add
+        else
+          task --silent private-dev:ssh-setup-cached >/dev/null
+          task --silent private-dev:ssh-agent-add >/dev/null
+        fi
+        ssh -A -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1
 
   private-dev:ssh-node1:
     desc: Alias for ssh:private-dev.
@@ -487,7 +575,7 @@ tasks:
         if [ '{{.RUN_ECR_SECRET}}' = 'true' ]; then
           set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-ecr-secret.yml"
         fi
-        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" --syntax-check "$@"
+        ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i "${inventory}" --syntax-check "$@"
 
   servers:bootstrap:
     desc: Install OS packages, containerd, kubeadm, kubelet, and kubectl.
@@ -515,7 +603,7 @@ tasks:
           ubuntu|debian|apt) playbook='bootstrap-servers.yml' ;;
           *) printf 'Unknown SERVER_OS=%s. Expected el9, rhel, centos, ubuntu, debian, or apt.\n' "${server_os}" >&2; exit 2 ;;
         esac
-        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/${playbook}"
+        ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} {{.ANSIBLE_BECOME_ARGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/${playbook}"
 
   servers:verify:
     desc: Verify server prerequisites after package bootstrap.
@@ -597,7 +685,7 @@ tasks:
         if [ -z "${inventory}" ]; then
           inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini'
         fi
-        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-argocd.yml" \
+        ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} {{.ANSIBLE_BECOME_ARGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-argocd.yml" \
           -e private_dev_argocd_namespace='{{.PRIVATE_DEV_ARGOCD_NAMESPACE}}' \
           -e private_dev_argocd_install_manifest_url='{{.PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL}}' \
           -e private_dev_argocd_root_application_url='{{.PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL}}' \
@@ -644,7 +732,7 @@ tasks:
   aws-dev:bootstrap:
     desc: Bootstrap the aws-dev kubeadm cluster using the same command surface.
     cmds:
-      - task cluster:bootstrap CLUSTER_ENV=aws-dev SERVER_OS='{{default "ubuntu" .SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}' RUN_ECR_SECRET='{{default "false" .RUN_ECR_SECRET}}'
+      - task cluster:bootstrap CLUSTER_ENV=aws-dev SERVER_OS=ubuntu ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY=./inventories/aws/dev.ini ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}' ASK_BECOME_PASS=false RUN_ECR_SECRET='{{default "false" .RUN_ECR_SECRET}}'
 
   playbook:
     internal: true
@@ -665,4 +753,4 @@ tasks:
             *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
           esac
         fi
-        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/{{.PLAYBOOK}}"
+        ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} {{.ANSIBLE_BECOME_ARGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/{{.PLAYBOOK}}"

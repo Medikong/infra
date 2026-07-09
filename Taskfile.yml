@@ -8,13 +8,24 @@ tasks:
 
   ssh:private-dev:
     desc: Connect to private-dev node1 after ensuring local SSH setup.
+    silent: true
     cmds:
-      - task -d infra/cluster/provision/ansible-lab ssh:private-dev
+      - |
+        set -eu
+        verbose='{{.VERBOSE | default "false"}}'
+        case "${verbose}" in
+          1|true|TRUE|yes|YES|on|ON)
+            task -d infra/cluster/provision/ansible-lab ssh:private-dev VERBOSE=true
+            ;;
+          *)
+            task --silent -d infra/cluster/provision/ansible-lab ssh:private-dev
+            ;;
+        esac
 
   private-dev:ssh-setup-all:
     desc: Setup local-to-node1 and node1-to-node2-node6 SSH aliases.
     cmds:
-      - task -d infra/cluster/provision/ansible-lab private-dev:ssh-setup-all
+      - task -d infra/cluster/provision/ansible-lab private-dev:ssh-setup-all VERBOSE='{{.VERBOSE | default "false"}}'
 
   private-dev:bootstrap:
     desc: Bootstrap private-dev Kubernetes nodes and Argo CD through ansible-lab.
