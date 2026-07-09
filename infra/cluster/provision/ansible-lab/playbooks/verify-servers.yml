@@ -22,13 +22,11 @@
       changed_when: false
       loop:
         - containerd
-        - btop
         - curl
         - jq
         - kubeadm
         - kubelet
         - kubectl
-        - ncdu
         - tcpdump
         - tmux
 
