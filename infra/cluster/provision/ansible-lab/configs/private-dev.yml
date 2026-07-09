@@ -19,3 +19,10 @@ cluster:
   ansible_flags: ""
   run_private_dev_secrets: false
   run_ecr_secret: false
+argocd:
+  namespace: argocd
+  install_manifest_url: https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  root_application_url: https://raw.githubusercontent.com/TicketMong/gitops/main/argo/applications/private-dev/root.yaml
+  server_ready_timeout: 300s
+  controller_ready_timeout: 300s
+  root_application_name: medikong-private-dev-apps

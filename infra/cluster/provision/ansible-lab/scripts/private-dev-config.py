@@ -100,6 +100,12 @@ def main():
             "ANSIBLE_FLAGS": data["cluster"]["ansible_flags"],
             "RUN_PRIVATE_DEV_SECRETS": data["cluster"]["run_private_dev_secrets"],
             "RUN_ECR_SECRET": data["cluster"]["run_ecr_secret"],
+            "ARGOCD_NAMESPACE": data["argocd"]["namespace"],
+            "ARGOCD_INSTALL_MANIFEST_URL": data["argocd"]["install_manifest_url"],
+            "ARGOCD_ROOT_APPLICATION_URL": data["argocd"]["root_application_url"],
+            "ARGOCD_SERVER_READY_TIMEOUT": data["argocd"]["server_ready_timeout"],
+            "ARGOCD_CONTROLLER_READY_TIMEOUT": data["argocd"]["controller_ready_timeout"],
+            "ARGOCD_ROOT_APPLICATION_NAME": data["argocd"]["root_application_name"],
         }
         for name, value in pairs.items():
             print(shell_assign(name, value))

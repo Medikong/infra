@@ -15,6 +15,18 @@ vars:
     sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.run_private_dev_secrets
   RUN_ECR_SECRET:
     sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} cluster.run_ecr_secret
+  PRIVATE_DEV_ARGOCD_NAMESPACE:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.namespace
+  PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.install_manifest_url
+  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.root_application_url
+  PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.server_ready_timeout
+  PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.controller_ready_timeout
+  PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME:
+    sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} argocd.root_application_name
   PRIVATE_DEV_SSH_CONFIG:
     sh: python3 scripts/private-dev-config.py value {{.PRIVATE_DEV_CONFIG}} ssh.config_path
   PRIVATE_DEV_SSH_KEY:
@@ -74,6 +86,8 @@ tasks:
         printf 'SERVER_OS=%s\n' "${server_os}"
         printf 'RUN_PRIVATE_DEV_SECRETS=%s\n' '{{.RUN_PRIVATE_DEV_SECRETS}}'
         printf 'RUN_ECR_SECRET=%s\n' '{{.RUN_ECR_SECRET}}'
+        printf 'PRIVATE_DEV_ARGOCD_NAMESPACE=%s\n' '{{.PRIVATE_DEV_ARGOCD_NAMESPACE}}'
+        printf 'PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL=%s\n' '{{.PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL}}'
 
   ansible:ping:
     desc: Verify SSH reachability for the selected environment inventory.
@@ -464,6 +478,9 @@ tasks:
           "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-helm.yml" \
           "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-metrics-server.yml" \
           "{{.ANSIBLE_ROOT}}/playbooks/verify-metrics-server.yml"
+        if [ '{{.CLUSTER_ENV}}' = 'private-dev' ]; then
+          set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-argocd.yml"
+        fi
         if [ '{{.RUN_PRIVATE_DEV_SECRETS}}' = 'true' ]; then
           set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-secrets.yml"
         fi
@@ -571,6 +588,23 @@ tasks:
         vars:
           PLAYBOOK: bootstrap-ecr-secret.yml
 
+  private-dev:argocd:
+    desc: Install Argo CD and apply the private-dev root Application.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini'
+        fi
+        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-argocd.yml" \
+          -e private_dev_argocd_namespace='{{.PRIVATE_DEV_ARGOCD_NAMESPACE}}' \
+          -e private_dev_argocd_install_manifest_url='{{.PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL}}' \
+          -e private_dev_argocd_root_application_url='{{.PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL}}' \
+          -e private_dev_argocd_server_ready_timeout='{{.PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT}}' \
+          -e private_dev_argocd_controller_ready_timeout='{{.PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT}}' \
+          -e private_dev_argocd_root_application_name='{{.PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME}}'
+
   cluster:bootstrap:
     desc: Bootstrap a full kubeadm environment. CLUSTER_ENV=private-dev|aws-dev SERVER_OS=el9|ubuntu.
     cmds:
@@ -601,10 +635,11 @@ tasks:
         fi
 
   private-dev:bootstrap:
-    desc: Bootstrap the on-prem private-dev cluster. Defaults to EL9/RHEL-family nodes.
+    desc: Bootstrap private-dev Kubernetes and Argo CD on EL9/RHEL-family nodes.
     cmds:
       - task private-dev:ssh-config
       - task cluster:bootstrap
+      - task private-dev:argocd
 
   aws-dev:bootstrap:
     desc: Bootstrap the aws-dev kubeadm cluster using the same command surface.

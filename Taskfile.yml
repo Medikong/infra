@@ -17,6 +17,6 @@ tasks:
       - task -d infra/cluster/provision/ansible-lab private-dev:ssh-setup-all
 
   private-dev:bootstrap:
-    desc: Bootstrap private-dev Kubernetes nodes through ansible-lab.
+    desc: Bootstrap private-dev Kubernetes nodes and Argo CD through ansible-lab.
     cmds:
       - task -d infra/cluster/provision/ansible-lab private-dev:bootstrap

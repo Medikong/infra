@@ -1,0 +1,117 @@
+---
+- name: Bootstrap Argo CD for private-dev
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Check admin kubeconfig
+      ansible.builtin.stat:
+        path: "{{ kubernetes_admin_conf_path }}"
+      register: admin_conf
+
+    - name: Fail when cluster is not initialized
+      ansible.builtin.fail:
+        msg: "Kubernetes admin kubeconfig is missing. Run private-dev cluster bootstrap first."
+      when: not admin_conf.stat.exists
+
+    - name: Ensure Argo CD namespace exists
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          kubectl create namespace "{{ private_dev_argocd_namespace }}" --dry-run=client -o yaml | kubectl apply -f -
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: argocd_namespace_apply
+      changed_when: "'created' in argocd_namespace_apply.stdout or 'configured' in argocd_namespace_apply.stdout"
+
+    - name: Install or update Argo CD
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - -n
+          - "{{ private_dev_argocd_namespace }}"
+          - -f
+          - "{{ private_dev_argocd_install_manifest_url }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: argocd_install_apply
+      changed_when: "'created' in argocd_install_apply.stdout or 'configured' in argocd_install_apply.stdout"
+
+    - name: Wait until Argo CD Application CRD is established
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - wait
+          - --for=condition=Established
+          - crd/applications.argoproj.io
+          - "--timeout={{ private_dev_argocd_controller_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Wait until Argo CD application controller is available
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ private_dev_argocd_namespace }}"
+          - rollout
+          - status
+          - statefulset/argocd-application-controller
+          - "--timeout={{ private_dev_argocd_controller_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Wait until Argo CD server is available
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ private_dev_argocd_namespace }}"
+          - rollout
+          - status
+          - deployment/argocd-server
+          - "--timeout={{ private_dev_argocd_server_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Apply private-dev root Application
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - -n
+          - "{{ private_dev_argocd_namespace }}"
+          - -f
+          - "{{ private_dev_argocd_root_application_url }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: private_dev_root_apply
+      changed_when: "'created' in private_dev_root_apply.stdout or 'configured' in private_dev_root_apply.stdout"
+
+    - name: Verify private-dev root Application exists
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ private_dev_argocd_namespace }}"
+          - get
+          - application
+          - "{{ private_dev_argocd_root_application_name }}"
+          - -o
+          - wide
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: private_dev_root_application
+      changed_when: false
+
+    - name: Print private-dev root Application
+      ansible.builtin.debug:
+        var: private_dev_root_application.stdout_lines
