@@ -2,17 +2,17 @@
 - name: Prepare kubelet node identity
   hosts: k8s_cluster
   become: true
-  gather_facts: false
+  gather_facts: true
   vars_files:
     - ../group_vars/all.yml
 
   tasks:
-    - name: Configure kubelet to use the inventory node IP
+    - name: Configure kubelet to use the private node IP
       ansible.builtin.copy:
         dest: /etc/default/kubelet
         mode: "0644"
         content: |
-          KUBELET_EXTRA_ARGS=--node-ip={{ node_ip | default(ansible_host) }}
+          KUBELET_EXTRA_ARGS=--node-ip={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}
       register: kubelet_default
 
     - name: Check whether node already joined a cluster
@@ -85,7 +85,7 @@
           - "{{ kubeadm_init_timeout }}"
           - kubeadm
           - init
-          - "--apiserver-advertise-address={{ node_ip | default(ansible_host) }}"
+          - "--apiserver-advertise-address={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}"
           - "--pod-network-cidr={{ kubernetes_pod_network_cidr }}"
           - "--cri-socket={{ kubernetes_cri_socket }}"
         creates: "{{ kubernetes_admin_conf_path }}"

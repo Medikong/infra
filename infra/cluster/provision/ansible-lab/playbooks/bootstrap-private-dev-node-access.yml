@@ -1,0 +1,46 @@
+---
+- name: Configure private-dev node-to-node access aliases
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Assert private-dev node aliases are unique
+      ansible.builtin.assert:
+        that:
+          - groups['k8s_cluster'] | map('extract', hostvars, 'private_dev_node_alias') | list | length == groups['k8s_cluster'] | map('extract', hostvars, 'private_dev_node_alias') | list | unique | length
+        fail_msg: private_dev_node_alias values must be unique.
+      run_once: true
+
+    - name: Build private-dev hosts entries
+      ansible.builtin.set_fact:
+        private_dev_hosts_entries: "{{ private_dev_hosts_entries | default([]) + [(hostvars[item].node_ip | default(hostvars[item].ansible_default_ipv4.address)) ~ ' ' ~ item ~ ' ' ~ hostvars[item].private_dev_node_alias] }}"
+      loop: "{{ groups['k8s_cluster'] }}"
+      run_once: true
+
+    - name: Configure private-dev node hosts block
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} ANSIBLE MANAGED PRIVATE-DEV NODES"
+        block: "{{ hostvars[groups['k8s_cluster'][0]].private_dev_hosts_entries | join('\n') }}"
+
+    - name: Ensure system ssh config directory exists
+      ansible.builtin.file:
+        path: /etc/ssh/ssh_config.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure system-wide private-dev node aliases
+      ansible.builtin.copy:
+        dest: /etc/ssh/ssh_config.d/20-private-dev-nodes.conf
+        mode: "0644"
+        content: |
+          Host node1 node2 node3 node4 node5 node6
+            StrictHostKeyChecking accept-new
+
+    - name: Verify private-dev hosts aliases resolve locally
+      ansible.builtin.command: "getent hosts {{ hostvars[item].private_dev_node_alias }}"
+      loop: "{{ groups['k8s_cluster'] }}"
+      changed_when: false

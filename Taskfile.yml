@@ -1,0 +1,74 @@
+version: "3"
+
+vars:
+  ANSIBLE_LAB_ROOT: '{{default "infra/cluster/provision/ansible-lab" .ANSIBLE_LAB_ROOT}}'
+  PRIVATE_DEV_SSH_CONFIG: '{{default "../../../../.local/private-dev/ssh_config" .PRIVATE_DEV_SSH_CONFIG}}'
+  PRIVATE_DEV_SSH_KEY: '{{default "~/.ssh/medikong-private-dev" .PRIVATE_DEV_SSH_KEY}}'
+  PRIVATE_DEV_SSH_PASSPHRASE: '{{default "" .PRIVATE_DEV_SSH_PASSPHRASE}}'
+  PRIVATE_DEV_SSH_USER: '{{default "lab-bum4496-833cff" .PRIVATE_DEV_SSH_USER}}'
+  PRIVATE_DEV_NODE1_HOST: '{{default "external.terminal-lab.kr" .PRIVATE_DEV_NODE1_HOST}}'
+  PRIVATE_DEV_NODE1_PORT: '{{default "41280" .PRIVATE_DEV_NODE1_PORT}}'
+  PRIVATE_DEV_NODE2_HOST: '{{default "10.0.3.45" .PRIVATE_DEV_NODE2_HOST}}'
+  PRIVATE_DEV_NODE3_HOST: '{{default "10.0.1.246" .PRIVATE_DEV_NODE3_HOST}}'
+  PRIVATE_DEV_NODE4_HOST: '{{default "10.0.2.233" .PRIVATE_DEV_NODE4_HOST}}'
+  PRIVATE_DEV_NODE5_HOST: '{{default "10.0.2.250" .PRIVATE_DEV_NODE5_HOST}}'
+  PRIVATE_DEV_NODE6_HOST: '{{default "10.0.3.196" .PRIVATE_DEV_NODE6_HOST}}'
+  SERVER_OS: '{{default "el9" .SERVER_OS}}'
+  ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
+  RUN_PRIVATE_DEV_SECRETS: '{{default "false" .RUN_PRIVATE_DEV_SECRETS}}'
+  RUN_ECR_SECRET: '{{default "false" .RUN_ECR_SECRET}}'
+
+tasks:
+  default:
+    desc: Show root-level private-dev entrypoints.
+    cmds:
+      - task --list
+
+  ssh:private-dev:
+    desc: Connect to private-dev node1 after ensuring local SSH setup.
+    cmds:
+      - task: _ansible-lab
+        vars:
+          LAB_TASK: ssh:private-dev
+
+  private-dev:ssh-setup-all:
+    desc: Setup local-to-node1 and node1-to-node2-node6 SSH aliases.
+    cmds:
+      - task: _ansible-lab
+        vars:
+          LAB_TASK: private-dev:ssh-setup-all
+
+  private-dev:bootstrap:
+    desc: Bootstrap private-dev Kubernetes nodes through ansible-lab.
+    cmds:
+      - task: _ansible-lab
+        vars:
+          LAB_TASK: private-dev:bootstrap
+
+  _ansible-lab:
+    internal: true
+    vars:
+      LAB_TASK: '{{default "" .LAB_TASK}}'
+    cmds:
+      - |
+        set -eu
+        if [ -z '{{.LAB_TASK}}' ]; then
+          printf '%s\n' 'LAB_TASK is required.' >&2
+          exit 2
+        fi
+        task -d '{{.ANSIBLE_LAB_ROOT}}' '{{.LAB_TASK}}' \
+          PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' \
+          PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' \
+          PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' \
+          PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' \
+          PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' \
+          PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' \
+          PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' \
+          PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' \
+          PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' \
+          PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' \
+          PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}' \
+          SERVER_OS='{{.SERVER_OS}}' \
+          ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}' \
+          RUN_PRIVATE_DEV_SECRETS='{{.RUN_PRIVATE_DEV_SECRETS}}' \
+          RUN_ECR_SECRET='{{.RUN_ECR_SECRET}}'

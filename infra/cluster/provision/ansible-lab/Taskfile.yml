@@ -1,0 +1,617 @@
+version: "3"
+
+vars:
+  ANSIBLE_ROOT: '{{default "." .ANSIBLE_ROOT}}'
+  CLUSTER_ENV: '{{default "private-dev" .CLUSTER_ENV}}'
+  SERVER_OS: '{{default "" .SERVER_OS}}'
+  ANSIBLE_INVENTORY: '{{default "" .ANSIBLE_INVENTORY}}'
+  ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
+  RUN_PRIVATE_DEV_SECRETS: '{{default "false" .RUN_PRIVATE_DEV_SECRETS}}'
+  RUN_ECR_SECRET: '{{default "false" .RUN_ECR_SECRET}}'
+  PRIVATE_DEV_SSH_CONFIG: '{{default "../../../../.local/private-dev/ssh_config" .PRIVATE_DEV_SSH_CONFIG}}'
+  PRIVATE_DEV_SSH_KEY: '{{default "~/.ssh/medikong-private-dev" .PRIVATE_DEV_SSH_KEY}}'
+  PRIVATE_DEV_SSH_PASSPHRASE: '{{default "" .PRIVATE_DEV_SSH_PASSPHRASE}}'
+  PRIVATE_DEV_SSH_USER: '{{default "lab-bum4496-833cff" .PRIVATE_DEV_SSH_USER}}'
+  PRIVATE_DEV_NODE1_HOST: '{{default "external.terminal-lab.kr" .PRIVATE_DEV_NODE1_HOST}}'
+  PRIVATE_DEV_NODE1_PORT: '{{default "41280" .PRIVATE_DEV_NODE1_PORT}}'
+  PRIVATE_DEV_NODE2_HOST: '{{default "10.0.3.45" .PRIVATE_DEV_NODE2_HOST}}'
+  PRIVATE_DEV_NODE3_HOST: '{{default "10.0.1.246" .PRIVATE_DEV_NODE3_HOST}}'
+  PRIVATE_DEV_NODE4_HOST: '{{default "10.0.2.233" .PRIVATE_DEV_NODE4_HOST}}'
+  PRIVATE_DEV_NODE5_HOST: '{{default "10.0.2.250" .PRIVATE_DEV_NODE5_HOST}}'
+  PRIVATE_DEV_NODE6_HOST: '{{default "10.0.3.196" .PRIVATE_DEV_NODE6_HOST}}'
+
+tasks:
+  default:
+    desc: Show available infrastructure bootstrap tasks.
+    cmds:
+      - task --list
+
+  env:print:
+    desc: Print the resolved Ansible inventory and OS family for CLUSTER_ENV.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *)
+              printf 'Unknown CLUSTER_ENV=%s. Expected private-dev or aws-dev.\n' '{{.CLUSTER_ENV}}' >&2
+              exit 2
+              ;;
+          esac
+        fi
+        server_os='{{.SERVER_OS}}'
+        if [ -z "${server_os}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) server_os='el9' ;;
+            aws-dev) server_os='ubuntu' ;;
+            *) server_os='ubuntu' ;;
+          esac
+        fi
+        printf 'CLUSTER_ENV=%s\n' '{{.CLUSTER_ENV}}'
+        printf 'ANSIBLE_ROOT=%s\n' '{{.ANSIBLE_ROOT}}'
+        printf 'ANSIBLE_INVENTORY=%s\n' "${inventory}"
+        printf 'SERVER_OS=%s\n' "${server_os}"
+        printf 'RUN_PRIVATE_DEV_SECRETS=%s\n' '{{.RUN_PRIVATE_DEV_SECRETS}}'
+        printf 'RUN_ECR_SECRET=%s\n' '{{.RUN_ECR_SECRET}}'
+
+  ansible:ping:
+    desc: Verify SSH reachability for the selected environment inventory.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
+          esac
+        fi
+        ansible {{.ANSIBLE_FLAGS}} -i "${inventory}" all -m ping
+
+  inventory:check:
+    desc: Check environment inventory safety assumptions before bootstrap.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
+          esac
+        fi
+        if [ ! -f "${inventory}" ]; then
+          printf 'Missing Ansible inventory: %s\n' "${inventory}" >&2
+          exit 2
+        fi
+        if [ '{{.CLUSTER_ENV}}' = 'private-dev' ] && grep -E 'external\.terminal-lab|ansible_host=external\.|ansible_host=.*\.elb\.|ansible_host=.*amazonaws\.com' "${inventory}" >/dev/null; then
+          printf 'private-dev inventory must not use external targets for node2-node6: %s\n' "${inventory}" >&2
+          exit 2
+        fi
+        printf 'Inventory check passed: %s\n' "${inventory}"
+
+  private-dev:ssh-keygen:
+    desc: Generate a local operator SSH key for private-dev if it does not exist.
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        if [ -e "${key}" ]; then
+          printf 'SSH key already exists: %s\n' "${key}"
+          exit 0
+        fi
+        mkdir -p "$(dirname "${key}")"
+        ssh-keygen -t ed25519 -a 100 -N '{{.PRIVATE_DEV_SSH_PASSPHRASE}}' -f "${key}" -C "{{.PRIVATE_DEV_SSH_USER}}@private-dev"
+
+  private-dev:ssh-config:
+    desc: Generate a local-only SSH config that reaches node2-node6 through node1.
+    cmds:
+      - |
+        set -eu
+        config='{{.PRIVATE_DEV_SSH_CONFIG}}'
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        mkdir -p "$(dirname "${config}")"
+        cat > "${config}" <<EOF
+        # Generated by: task private-dev:ssh-config
+        # This file is local-only and ignored by git.
+
+        Host private-dev-node1 node1
+          HostName {{.PRIVATE_DEV_NODE1_HOST}}
+          Port {{.PRIVATE_DEV_NODE1_PORT}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+
+        Host node2
+          HostName {{.PRIVATE_DEV_NODE2_HOST}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ProxyJump private-dev-node1
+          StrictHostKeyChecking accept-new
+
+        Host node3
+          HostName {{.PRIVATE_DEV_NODE3_HOST}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ProxyJump private-dev-node1
+          StrictHostKeyChecking accept-new
+
+        Host node4
+          HostName {{.PRIVATE_DEV_NODE4_HOST}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ProxyJump private-dev-node1
+          StrictHostKeyChecking accept-new
+
+        Host node5
+          HostName {{.PRIVATE_DEV_NODE5_HOST}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ProxyJump private-dev-node1
+          StrictHostKeyChecking accept-new
+
+        Host node6
+          HostName {{.PRIVATE_DEV_NODE6_HOST}}
+          User {{.PRIVATE_DEV_SSH_USER}}
+          IdentityFile ${key}
+          IdentitiesOnly yes
+          ProxyJump private-dev-node1
+          StrictHostKeyChecking accept-new
+        EOF
+        sed -i.bak 's/^        //' "${config}"
+        rm -f "${config}.bak"
+        chmod 0600 "${config}"
+        printf 'Generated SSH config: %s\n' "${config}"
+
+  private-dev:ssh-copy-node1:
+    desc: Install the local operator public key on node1 only.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        if [ ! -f "${key}.pub" ]; then
+          printf 'Missing public key: %s.pub\n' "${key}" >&2
+          printf 'Run: task private-dev:ssh-keygen\n' >&2
+          exit 2
+        fi
+        ssh-copy-id -i "${key}.pub" -p '{{.PRIVATE_DEV_NODE1_PORT}}' '{{.PRIVATE_DEV_SSH_USER}}@{{.PRIVATE_DEV_NODE1_HOST}}'
+
+  private-dev:ssh-ensure-node1:
+    desc: Ensure local key, SSH config, and node1 authorized_keys are ready.
+    cmds:
+      - task private-dev:ssh-keygen PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}'
+      - task private-dev:ssh-config PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - |
+        set -eu
+        if ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -o BatchMode=yes private-dev-node1 'true' >/dev/null 2>&1; then
+          printf 'node1 SSH key is already installed.\n'
+          exit 0
+        fi
+        printf 'node1 SSH key is not installed yet. Running ssh-copy-id; enter the node1 password once.\n'
+        task private-dev:ssh-copy-node1 PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}'
+        ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -o BatchMode=yes private-dev-node1 'true' >/dev/null
+
+  private-dev:ssh-setup-node1:
+    desc: One-command local SSH setup for private-dev node1.
+    cmds:
+      - task private-dev:ssh-ensure-node1 PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+
+  private-dev:ssh-agent-add:
+    desc: Add the private-dev local key to ssh-agent for node1-to-node SSH.
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        if [ ! -f "${key}" ]; then
+          printf 'Missing private key: %s\n' "${key}" >&2
+          printf 'Run: task private-dev:ssh-keygen\n' >&2
+          exit 2
+        fi
+        ssh-add "${key}"
+
+  private-dev:ssh-config-node1-peers:
+    desc: Install node2-node6 SSH aliases on node1 for `ssh node2` style access.
+    cmds:
+      - task private-dev:ssh-ensure-node1 PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - |
+        set -eu
+        ssh -A -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1 'PRIVATE_DEV_SSH_USER="{{.PRIVATE_DEV_SSH_USER}}" PRIVATE_DEV_NODE2_HOST="{{.PRIVATE_DEV_NODE2_HOST}}" PRIVATE_DEV_NODE3_HOST="{{.PRIVATE_DEV_NODE3_HOST}}" PRIVATE_DEV_NODE4_HOST="{{.PRIVATE_DEV_NODE4_HOST}}" PRIVATE_DEV_NODE5_HOST="{{.PRIVATE_DEV_NODE5_HOST}}" PRIVATE_DEV_NODE6_HOST="{{.PRIVATE_DEV_NODE6_HOST}}" sh -s' <<'REMOTE'
+        set -eu
+        mkdir -p "${HOME}/.ssh"
+        chmod 700 "${HOME}/.ssh"
+        config="${HOME}/.ssh/config"
+        tmp="$(mktemp)"
+        if [ -f "${config}" ]; then
+          awk '
+            /^# BEGIN ANSIBLE MANAGED PRIVATE-DEV PEERS$/ { skip=1; next }
+            /^# END ANSIBLE MANAGED PRIVATE-DEV PEERS$/ { skip=0; next }
+            skip != 1 { print }
+          ' "${config}" > "${tmp}"
+        fi
+        cat >> "${tmp}" <<EOF
+        # BEGIN ANSIBLE MANAGED PRIVATE-DEV PEERS
+        Host node2
+          HostName ${PRIVATE_DEV_NODE2_HOST}
+          User ${PRIVATE_DEV_SSH_USER}
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+
+        Host node3
+          HostName ${PRIVATE_DEV_NODE3_HOST}
+          User ${PRIVATE_DEV_SSH_USER}
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+
+        Host node4
+          HostName ${PRIVATE_DEV_NODE4_HOST}
+          User ${PRIVATE_DEV_SSH_USER}
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+
+        Host node5
+          HostName ${PRIVATE_DEV_NODE5_HOST}
+          User ${PRIVATE_DEV_SSH_USER}
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+
+        Host node6
+          HostName ${PRIVATE_DEV_NODE6_HOST}
+          User ${PRIVATE_DEV_SSH_USER}
+          ForwardAgent yes
+          StrictHostKeyChecking accept-new
+        # END ANSIBLE MANAGED PRIVATE-DEV PEERS
+        EOF
+        sed -i.bak 's/^        //' "${tmp}"
+        mv "${tmp}" "${config}"
+        rm -f "${config}.bak"
+        chmod 600 "${config}"
+        REMOTE
+
+  private-dev:ssh-setup-all:
+    desc: Setup local-to-node1 and node1-to-node2-node6 SSH aliases.
+    cmds:
+      - task private-dev:ssh-ensure-node1 PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - task private-dev:ssh-agent-add PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}'
+      - task private-dev:ssh-copy-all PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}'
+      - task private-dev:ssh-config-node1-peers PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+
+  ssh:private-dev:
+    desc: Ensure private-dev node1 key access, then open an interactive SSH session.
+    cmds:
+      - task private-dev:ssh-ensure-node1 PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - task private-dev:ssh-agent-add PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}'
+      - task private-dev:ssh-config-node1-peers PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - ssh -A -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1
+
+  private-dev:ssh-node1:
+    desc: Alias for ssh:private-dev.
+    cmds:
+      - task ssh:private-dev PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_PASSPHRASE='{{.PRIVATE_DEV_SSH_PASSPHRASE}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+
+  private-dev:ssh-copy-all:
+    desc: Install the local operator public key on node1-node6 through node1 ProxyJump.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        if [ ! -f "${key}.pub" ]; then
+          printf 'Missing public key: %s.pub\n' "${key}" >&2
+          printf 'Run: task private-dev:ssh-keygen\n' >&2
+          exit 2
+        fi
+        for host in private-dev-node1 node2 node3 node4 node5 node6; do
+          printf '== installing key on %s ==\n' "${host}"
+          ssh-copy-id -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -i "${key}.pub" "${host}"
+        done
+
+  private-dev:ssh-copy-all:dry:
+    desc: Show which node1-ProxyJump ssh-copy-id commands would run.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then
+          key="${HOME}/${key#\~/}"
+        fi
+        for host in private-dev-node1 node2 node3 node4 node5 node6; do
+          ssh-copy-id -n -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -i "${key}.pub" "${host}" || true
+        done
+
+  private-dev:ssh-config:check:
+    desc: Validate the generated private-dev SSH config without opening SSH sessions.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        for host in private-dev-node1 node1 node2 node3 node4 node5 node6; do
+          ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -G "${host}" >/dev/null
+        done
+        printf 'SSH config check passed: %s\n' '{{.PRIVATE_DEV_SSH_CONFIG}}'
+
+  private-dev:ssh-ping-node1:
+    desc: Verify SSH reachability to node1 only.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1 'hostname -f || hostname'
+
+  private-dev:node1-discover:
+    desc: Inspect node1 DNS and network view without connecting to node2-node6.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1 '
+          set -u
+          printf "hostname: "; hostname -f 2>/dev/null || hostname
+          printf "\naddresses:\n"; hostname -I 2>/dev/null || true
+          printf "\nroutes:\n"; ip -4 route 2>/dev/null || true
+          printf "\nname resolution:\n"
+          for host in \
+            node1 node2 node3 node4 node5 node6 \
+            kt-cloud-lab-bum4496-1783563562374-node-1.novalocal \
+            kt-cloud-lab-bum4496-1783563562374-node-2.novalocal \
+            kt-cloud-lab-bum4496-1783563562374-node-3.novalocal \
+            kt-cloud-lab-bum4496-1783563562374-node-4.novalocal \
+            kt-cloud-lab-bum4496-1783563562374-node-5.novalocal \
+            kt-cloud-lab-bum4496-1783563562374-node-6.novalocal; do
+            printf "%s -> " "$host"
+            getent hosts "$host" || true
+          done
+          printf "\n/etc/hosts:\n"
+          sed -n "1,160p" /etc/hosts 2>/dev/null || true
+        '
+
+  private-dev:ssh-ping:
+    desc: Verify node1 and node2-node6 through the node1 jump host.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        for host in private-dev-node1 node2 node3 node4 node5 node6; do
+          printf '== %s ==\n' "${host}"
+          ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' "${host}" 'hostname -f || hostname'
+        done
+
+  syntax:check:
+    desc: Run Ansible syntax checks for the selected environment bootstrap lane.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
+          esac
+        fi
+        server_os='{{.SERVER_OS}}'
+        if [ -z "${server_os}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) server_os='el9' ;;
+            aws-dev) server_os='ubuntu' ;;
+            *) server_os='ubuntu' ;;
+          esac
+        fi
+        case "${server_os}" in
+          el9|rhel|centos) server_playbook='bootstrap-servers-centos.yml' ;;
+          ubuntu|debian|apt) server_playbook='bootstrap-servers.yml' ;;
+          *) printf 'Unknown SERVER_OS=%s. Expected el9, rhel, centos, ubuntu, debian, or apt.\n' "${server_os}" >&2; exit 2 ;;
+        esac
+        set -- \
+          "{{.ANSIBLE_ROOT}}/playbooks/${server_playbook}" \
+          "{{.ANSIBLE_ROOT}}/playbooks/verify-servers.yml"
+        if [ '{{.CLUSTER_ENV}}' = 'private-dev' ]; then
+          set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-node-access.yml"
+        fi
+        set -- "$@" \
+          "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-cluster.yml" \
+          "{{.ANSIBLE_ROOT}}/playbooks/verify-cluster.yml" \
+          "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-node-labels.yml" \
+          "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-helm.yml" \
+          "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-metrics-server.yml" \
+          "{{.ANSIBLE_ROOT}}/playbooks/verify-metrics-server.yml"
+        if [ '{{.RUN_PRIVATE_DEV_SECRETS}}' = 'true' ]; then
+          set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-private-dev-secrets.yml"
+        fi
+        if [ '{{.RUN_ECR_SECRET}}' = 'true' ]; then
+          set -- "$@" "{{.ANSIBLE_ROOT}}/playbooks/bootstrap-ecr-secret.yml"
+        fi
+        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" --syntax-check "$@"
+
+  servers:bootstrap:
+    desc: Install OS packages, containerd, kubeadm, kubelet, and kubectl.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
+          esac
+        fi
+        server_os='{{.SERVER_OS}}'
+        if [ -z "${server_os}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) server_os='el9' ;;
+            aws-dev) server_os='ubuntu' ;;
+            *) server_os='ubuntu' ;;
+          esac
+        fi
+        case "${server_os}" in
+          el9|rhel|centos) playbook='bootstrap-servers-centos.yml' ;;
+          ubuntu|debian|apt) playbook='bootstrap-servers.yml' ;;
+          *) printf 'Unknown SERVER_OS=%s. Expected el9, rhel, centos, ubuntu, debian, or apt.\n' "${server_os}" >&2; exit 2 ;;
+        esac
+        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/${playbook}"
+
+  servers:verify:
+    desc: Verify server prerequisites after package bootstrap.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: verify-servers.yml
+
+  cluster:init:
+    desc: Initialize kubeadm control plane, Calico, and worker joins.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: bootstrap-cluster.yml
+
+  cluster:verify:
+    desc: Verify Kubernetes node and system pod readiness.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: verify-cluster.yml
+
+  node-labels:bootstrap:
+    desc: Apply environment node labels from the inventory.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: bootstrap-node-labels.yml
+
+  private-dev:node-access:
+    desc: Configure system-level /etc/hosts and node aliases across private-dev nodes.
+    cmds:
+      - task: playbook
+        vars:
+          CLUSTER_ENV: private-dev
+          ANSIBLE_FLAGS: '{{.ANSIBLE_FLAGS}} -e ansible_user={{.PRIVATE_DEV_SSH_USER}}'
+          PLAYBOOK: bootstrap-private-dev-node-access.yml
+
+  helm:bootstrap:
+    desc: Install Helm on the control plane.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: bootstrap-helm.yml
+
+  metrics:bootstrap:
+    desc: Install Metrics Server for HPA and kubectl top support.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: bootstrap-metrics-server.yml
+
+  metrics:verify:
+    desc: Verify Metrics Server and resource metrics.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: verify-metrics-server.yml
+
+  private-dev:secrets:
+    desc: Create private-dev Kubernetes Secrets from environment variables.
+    cmds:
+      - task: playbook
+        vars:
+          CLUSTER_ENV: private-dev
+          PLAYBOOK: bootstrap-private-dev-secrets.yml
+
+  ecr:secret:
+    desc: Create ECR imagePullSecrets in application and platform namespaces.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: bootstrap-ecr-secret.yml
+
+  cluster:bootstrap:
+    desc: Bootstrap a full kubeadm environment. CLUSTER_ENV=private-dev|aws-dev SERVER_OS=el9|ubuntu.
+    cmds:
+      - task env:print CLUSTER_ENV='{{.CLUSTER_ENV}}' SERVER_OS='{{.SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' RUN_PRIVATE_DEV_SECRETS='{{.RUN_PRIVATE_DEV_SECRETS}}' RUN_ECR_SECRET='{{.RUN_ECR_SECRET}}'
+      - task inventory:check CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}'
+      - task syntax:check CLUSTER_ENV='{{.CLUSTER_ENV}}' SERVER_OS='{{.SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' RUN_PRIVATE_DEV_SECRETS='{{.RUN_PRIVATE_DEV_SECRETS}}' RUN_ECR_SECRET='{{.RUN_ECR_SECRET}}'
+      - task ansible:ping CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - |
+        set -eu
+        if [ '{{.CLUSTER_ENV}}' = 'private-dev' ]; then
+          task private-dev:node-access ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+        fi
+      - task servers:bootstrap CLUSTER_ENV='{{.CLUSTER_ENV}}' SERVER_OS='{{.SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task servers:verify CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task cluster:init CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task cluster:verify CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task node-labels:bootstrap CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task helm:bootstrap CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task metrics:bootstrap CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - task metrics:verify CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}'
+      - |
+        set -eu
+        if [ '{{.RUN_PRIVATE_DEV_SECRETS}}' = 'true' ]; then
+          task private-dev:secrets ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}'
+        fi
+        if [ '{{.RUN_ECR_SECRET}}' = 'true' ]; then
+          task ecr:secret CLUSTER_ENV='{{.CLUSTER_ENV}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}'
+        fi
+
+  private-dev:bootstrap:
+    desc: Bootstrap the on-prem private-dev cluster. Defaults to EL9/RHEL-family nodes.
+    cmds:
+      - task private-dev:ssh-config PRIVATE_DEV_SSH_CONFIG='{{.PRIVATE_DEV_SSH_CONFIG}}' PRIVATE_DEV_SSH_KEY='{{.PRIVATE_DEV_SSH_KEY}}' PRIVATE_DEV_SSH_USER='{{.PRIVATE_DEV_SSH_USER}}' PRIVATE_DEV_NODE1_HOST='{{.PRIVATE_DEV_NODE1_HOST}}' PRIVATE_DEV_NODE1_PORT='{{.PRIVATE_DEV_NODE1_PORT}}' PRIVATE_DEV_NODE2_HOST='{{.PRIVATE_DEV_NODE2_HOST}}' PRIVATE_DEV_NODE3_HOST='{{.PRIVATE_DEV_NODE3_HOST}}' PRIVATE_DEV_NODE4_HOST='{{.PRIVATE_DEV_NODE4_HOST}}' PRIVATE_DEV_NODE5_HOST='{{.PRIVATE_DEV_NODE5_HOST}}' PRIVATE_DEV_NODE6_HOST='{{.PRIVATE_DEV_NODE6_HOST}}'
+      - task cluster:bootstrap CLUSTER_ENV=private-dev SERVER_OS='{{default "el9" .SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}} -e ansible_user={{.PRIVATE_DEV_SSH_USER}}' RUN_PRIVATE_DEV_SECRETS='{{default "false" .RUN_PRIVATE_DEV_SECRETS}}' RUN_ECR_SECRET='{{default "false" .RUN_ECR_SECRET}}'
+
+  aws-dev:bootstrap:
+    desc: Bootstrap the aws-dev kubeadm cluster using the same command surface.
+    cmds:
+      - task cluster:bootstrap CLUSTER_ENV=aws-dev SERVER_OS='{{default "ubuntu" .SERVER_OS}}' ANSIBLE_ROOT='{{.ANSIBLE_ROOT}}' ANSIBLE_INVENTORY='{{.ANSIBLE_INVENTORY}}' ANSIBLE_FLAGS='{{.ANSIBLE_FLAGS}}' RUN_ECR_SECRET='{{default "false" .RUN_ECR_SECRET}}'
+
+  playbook:
+    internal: true
+    vars:
+      PLAYBOOK: '{{default "" .PLAYBOOK}}'
+    cmds:
+      - |
+        set -eu
+        if [ -z '{{.PLAYBOOK}}' ]; then
+          printf '%s\n' 'PLAYBOOK is required.' >&2
+          exit 2
+        fi
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        if [ -z "${inventory}" ]; then
+          case '{{.CLUSTER_ENV}}' in
+            private-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/lab/private-dev.ini' ;;
+            aws-dev) inventory='{{.ANSIBLE_ROOT}}/inventories/aws/dev.ini' ;;
+            *) printf 'Unknown CLUSTER_ENV=%s.\n' '{{.CLUSTER_ENV}}' >&2; exit 2 ;;
+          esac
+        fi
+        ansible-playbook {{.ANSIBLE_FLAGS}} -i "${inventory}" "{{.ANSIBLE_ROOT}}/playbooks/{{.PLAYBOOK}}"
