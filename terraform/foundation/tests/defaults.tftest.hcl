@@ -53,8 +53,8 @@ run "foundation_defaults" {
 
   assert {
     condition = local.github_oidc_subjects == [
-      "repo:TicketMong/infra:ref:refs/tags/infra-aws-dev-*",
-      "repo:TicketMong/infra:environment:aws-dev",
+      "repo:Medikong/infra:ref:refs/tags/infra-aws-dev-*",
+      "repo:Medikong/infra:environment:aws-dev",
     ]
     error_message = "The GitHub deployment role must trust only infrastructure tags and the aws-dev environment."
   }

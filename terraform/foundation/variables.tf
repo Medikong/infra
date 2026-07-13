@@ -13,7 +13,7 @@ variable "aws_region" {
 variable "github_repository" {
   description = "GitHub repository allowed to request AWS deployment credentials."
   type        = string
-  default     = "TicketMong/infra"
+  default     = "Medikong/infra"
 }
 
 variable "github_environment" {
