@@ -1,0 +1,233 @@
+name: AWS dev release
+
+on:
+  push:
+    tags:
+      - "infra-aws-dev-bootstrap-v*"
+      - "infra-aws-dev-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-dev-release
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  WORKSPACE: dev
+
+jobs:
+  validate-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+      release_mode: ${{ steps.release.outputs.release_mode }}
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Require semantic version tag from main
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${tag}" =~ ^infra-aws-dev-bootstrap-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_mode="bootstrap"
+          elif [[ "${tag}" =~ ^infra-aws-dev-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_mode="apply"
+          else
+            printf 'Invalid AWS dev release tag: %s\n' "${tag}" >&2
+            exit 2
+          fi
+
+          git fetch --no-tags origin +main:refs/remotes/origin/main
+          commit_sha="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          git merge-base --is-ancestor "${commit_sha}" origin/main || {
+            printf 'Release tags must point to a commit contained in origin/main.\n' >&2
+            exit 2
+          }
+
+          printf 'commit_sha=%s\n' "${commit_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'release_mode=%s\n' "${release_mode}" >> "${GITHUB_OUTPUT}"
+
+  plan:
+    name: Terraform plan
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_DEV_SSH_PUBLIC_KEY: ${{ vars.AWS_DEV_SSH_PUBLIC_KEY }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+
+      - name: Install Task
+        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2.0.0
+        with:
+          version: 3.51.1
+
+      - name: Validate deployment variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN repository variable.}"
+          : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable.}"
+          : "${AWS_DEV_SSH_PUBLIC_KEY:?Set the AWS_DEV_SSH_PUBLIC_KEY repository variable.}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@acca2b1b2070338fb9fd1ca27ecee81d687e58e5 # v6.1.2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: infra-plan-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Prepare Terraform inputs
+        run: .github/scripts/prepare-aws-dev.sh plan
+
+      - name: Plan shared resources
+        if: needs.validate-tag.outputs.release_mode == 'bootstrap'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task -d terraform init STACK=shared BACKEND_CONFIG=shared/backend.hcl
+          task -d terraform plan STACK=shared
+
+      - name: Plan AWS dev environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          task -d terraform init STACK=environment ENV=dev BACKEND_CONFIG=environments/dev/backend.hcl
+          task -d terraform workspace ENV=dev WORKSPACE="${WORKSPACE}"
+          task -d terraform plan STACK=environment ENV=dev WORKSPACE="${WORKSPACE}" \
+            VAR_FILE="${GITHUB_WORKSPACE}/.local/ci/aws-dev.tfvars"
+
+      - name: Upload saved plans
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aws-dev-plan-${{ github.run_id }}
+          path: |
+            .local/terraform/dev/plan.tfplan
+            .local/terraform/shared/plan.tfplan
+          if-no-files-found: error
+          retention-days: 1
+
+  apply:
+    name: Approve and apply
+    needs:
+      - validate-tag
+      - plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: aws-dev
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_DEV_SSH_PRIVATE_KEY: ${{ secrets.AWS_DEV_SSH_PRIVATE_KEY }}
+      AWS_DEV_SSH_PUBLIC_KEY: ${{ vars.AWS_DEV_SSH_PUBLIC_KEY }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+
+      - name: Install Task
+        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2.0.0
+        with:
+          version: 3.51.1
+
+      - name: Install Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible and Session Manager plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "ansible-core==2.20.5"
+          curl --fail --location --silent --show-error \
+            "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" \
+            --output /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+          session-manager-plugin >/dev/null
+
+      - name: Validate deployment variables and secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN repository variable.}"
+          : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable.}"
+          : "${AWS_DEV_SSH_PUBLIC_KEY:?Set the AWS_DEV_SSH_PUBLIC_KEY repository variable.}"
+          : "${AWS_DEV_SSH_PRIVATE_KEY:?Set AWS_DEV_SSH_PRIVATE_KEY in the aws-dev environment.}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@acca2b1b2070338fb9fd1ca27ecee81d687e58e5 # v6.1.2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: infra-apply-${{ github.run_id }}
+          role-duration-seconds: 7200
+          mask-aws-account-id: true
+
+      - name: Prepare Terraform and Ansible inputs
+        run: .github/scripts/prepare-aws-dev.sh apply
+
+      - name: Download approved plans
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: aws-dev-plan-${{ github.run_id }}
+          path: .local/terraform
+
+      - name: Apply shared resources
+        if: needs.validate-tag.outputs.release_mode == 'bootstrap'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task -d terraform init STACK=shared BACKEND_CONFIG=shared/backend.hcl
+          task -d terraform apply STACK=shared \
+            PLAN_FILE="${GITHUB_WORKSPACE}/.local/terraform/shared/plan.tfplan"
+
+      - name: Apply AWS dev environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          task -d terraform init STACK=environment ENV=dev BACKEND_CONFIG=environments/dev/backend.hcl
+          task -d terraform workspace ENV=dev WORKSPACE="${WORKSPACE}"
+          task -d terraform apply STACK=environment ENV=dev WORKSPACE="${WORKSPACE}" \
+            PLAN_FILE="${GITHUB_WORKSPACE}/.local/terraform/dev/plan.tfplan"
+
+      - name: Configure Kubernetes
+        run: task -d infra/cluster/provision/ansible/environments/aws-dev aws-dev:configure WORKSPACE="${WORKSPACE}"
