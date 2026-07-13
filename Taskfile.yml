@@ -1,33 +1,133 @@
 version: "3"
 
+vars:
+  ENV: '{{default "dev" .ENV}}'
+  STACK: '{{default "environment" .STACK}}'
+  WORKSPACE: '{{default .ENV .WORKSPACE}}'
+
 tasks:
   default:
-    desc: Show root-level private-dev entrypoints.
+    desc: Show root-level infrastructure entrypoints.
     cmds:
       - task --list
 
   ssh:private-dev:
     desc: Connect to private-dev node1 after ensuring local SSH setup.
-    silent: true
     cmds:
-      - |
-        set -eu
-        verbose='{{.VERBOSE | default "false"}}'
-        case "${verbose}" in
-          1|true|TRUE|yes|YES|on|ON)
-            task -d infra/cluster/provision/ansible-lab ssh:private-dev VERBOSE=true
-            ;;
-          *)
-            task --silent -d infra/cluster/provision/ansible-lab ssh:private-dev
-            ;;
-        esac
+      - task -d infra/cluster/provision/ansible/environments/private-dev ssh:private-dev {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
   private-dev:ssh-setup-all:
     desc: Setup local-to-node1 and node1-to-node2-node6 SSH aliases.
     cmds:
-      - task -d infra/cluster/provision/ansible-lab private-dev:ssh-setup-all VERBOSE='{{.VERBOSE | default "false"}}'
+      - task -d infra/cluster/provision/ansible/environments/private-dev private-dev:ssh-setup-all {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:syntax:
+    desc: Proxy private-dev Ansible syntax checks.
+    cmds:
+      - task -d infra/cluster/provision/ansible/environments/private-dev syntax {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
   private-dev:bootstrap:
-    desc: Bootstrap private-dev Kubernetes nodes and Argo CD through ansible-lab.
+    desc: Bootstrap private-dev Kubernetes nodes and Argo CD.
     cmds:
-      - task -d infra/cluster/provision/ansible-lab private-dev:bootstrap
+      - task -d infra/cluster/provision/ansible/environments/private-dev private-dev:bootstrap {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:fmt:
+    desc: Proxy Terraform formatting to terraform/Taskfile.yml.
+    cmds:
+      - task -d terraform fmt CHECK='{{default "false" .CHECK}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:validate:
+    desc: Proxy validation for every Terraform root.
+    cmds:
+      - task -d terraform validate
+
+  terraform:test:
+    desc: Proxy Terraform tests with mocked AWS providers.
+    cmds:
+      - task -d terraform test
+
+  terraform:foundation:bootstrap:
+    desc: Create the Terraform state bucket and GitHub deployment identity once.
+    cmds:
+      - task -d terraform foundation:bootstrap {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:foundation:init:
+    desc: Initialize the existing foundation S3 backend on this workstation.
+    cmds:
+      - task -d terraform foundation:init {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:foundation:plan:
+    desc: Proxy a foundation Terraform plan.
+    cmds:
+      - task -d terraform foundation:plan {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:foundation:apply:
+    desc: Plan and apply a foundation change. Requires CONFIRM=foundation.
+    cmds:
+      - task -d terraform foundation:apply CONFIRM='{{default "" .CONFIRM}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:foundation:output:
+    desc: Show the state bucket and GitHub deployment role outputs.
+    silent: true
+    cmds:
+      - task -d terraform foundation:output {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:init:
+    desc: Proxy Terraform initialization. STACK defaults to environment and ENV to dev.
+    cmds:
+      - task -d terraform init STACK='{{.STACK}}' ENV='{{.ENV}}' BACKEND_CONFIG='{{default "" .BACKEND_CONFIG}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:workspace:
+    desc: Proxy environment workspace selection or creation.
+    cmds:
+      - task -d terraform workspace ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}'
+
+  terraform:plan:
+    desc: Proxy creation of a saved Terraform plan.
+    cmds:
+      - task -d terraform plan STACK='{{.STACK}}' ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' VAR_FILE='{{default "" .VAR_FILE}}' PLAN_FILE='{{default "" .PLAN_FILE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:apply:
+    desc: Apply a saved plan; shared and dev require a tagged GitHub Actions release.
+    cmds:
+      - task -d terraform apply STACK='{{.STACK}}' ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' PLAN_FILE='{{default "" .PLAN_FILE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:destroy:
+    desc: Destroy a sandbox environment; shared and dev are blocked.
+    cmds:
+      - task -d terraform destroy STACK='{{.STACK}}' ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:output:
+    desc: Proxy Terraform output inspection.
+    cmds:
+      - task -d terraform output STACK='{{.STACK}}' ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:inventory:
+    desc: Proxy Ansible inventory generation for an environment workspace.
+    cmds:
+      - task -d terraform inventory ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}'
+
+  terraform:instances:start:
+    desc: Proxy start of all EC2 instances in an environment workspace.
+    cmds:
+      - task -d terraform instances:start ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:instances:stop:
+    desc: Proxy stop of all EC2 instances after the daily dev window.
+    cmds:
+      - task -d terraform instances:stop ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:instances:status:
+    desc: Proxy EC2 instance status inspection for an environment workspace.
+    cmds:
+      - task -d terraform instances:status ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:kubernetes:tunnel:
+    desc: Proxy the SSM port forward to the private Kubernetes API.
+    cmds:
+      - task -d terraform kubernetes:tunnel ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  terraform:diagram:
+    desc: Proxy AWS architecture diagram generation.
+    cmds:
+      - task -d terraform diagram {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}

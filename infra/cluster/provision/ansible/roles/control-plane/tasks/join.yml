@@ -1,0 +1,31 @@
+---
+- name: Check additional control-plane state
+  ansible.builtin.stat:
+    path: "{{ kubernetes_admin_conf_path }}"
+  register: additional_control_plane_conf
+
+- name: Join additional control plane
+  ansible.builtin.command: >-
+    {{ hostvars[groups['control_plane'][0]].kubeadm_join_command.stdout }}
+    --control-plane
+    --certificate-key={{ hostvars[groups['control_plane'][0]].kubeadm_certificate_key }}
+    --apiserver-advertise-address={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}
+    --cri-socket={{ kubernetes_cri_socket }}
+  when: not additional_control_plane_conf.stat.exists
+
+- name: Ensure additional control-plane kubeconfig directory exists
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Install additional control-plane kubeconfig
+  ansible.builtin.copy:
+    src: "{{ kubernetes_admin_conf_path }}"
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+    remote_src: true

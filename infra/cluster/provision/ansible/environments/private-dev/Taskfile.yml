@@ -1,0 +1,144 @@
+version: "3"
+
+dotenv:
+  - configs/private-dev.env
+
+env:
+  ANSIBLE_CONFIG: ../../ansible.cfg
+
+vars:
+  ANSIBLE_INVENTORY: '{{default "./inventories/private-dev.ini" .ANSIBLE_INVENTORY}}'
+  ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
+  ANSIBLE_CONNECTION_ARGS: "--ssh-common-args='-F {{.PRIVATE_DEV_SSH_CONFIG}} -o StrictHostKeyChecking=accept-new'"
+  ASK_BECOME_PASS: '{{default "true" .ASK_BECOME_PASS}}'
+  ANSIBLE_BECOME_ARGS: '{{if eq .ASK_BECOME_PASS "true"}}--ask-become-pass{{end}}'
+  PRIVATE_DEV_SSH_CONFIG: '{{default ".local/private-dev/ssh_config" .PRIVATE_DEV_SSH_CONFIG}}'
+  PRIVATE_DEV_SSH_KEY: '{{default "~/.ssh/medikong-private-dev" .PRIVATE_DEV_SSH_KEY}}'
+  PRIVATE_DEV_SSH_USER: '{{default "lab-bum4496-833cff" .PRIVATE_DEV_SSH_USER}}'
+
+tasks:
+  default:
+    desc: Show private-dev Ansible tasks.
+    cmds:
+      - task --list
+
+  inventory:check:
+    desc: Validate the committed private-dev inventory and ProxyJump policy.
+    cmds:
+      - |
+        set -eu
+        test -f '{{.ANSIBLE_INVENTORY}}' || { printf 'Missing inventory: %s\n' '{{.ANSIBLE_INVENTORY}}' >&2; exit 2; }
+        if grep -E 'ansible_host=external\.|ansible_host=.*\.elb\.|ansible_host=.*amazonaws\.com' '{{.ANSIBLE_INVENTORY}}' >/dev/null; then
+          printf 'node2-node6 must use node1 ProxyJump aliases: %s\n' '{{.ANSIBLE_INVENTORY}}' >&2
+          exit 2
+        fi
+
+  private-dev:ssh-keygen:
+    desc: Create the local private-dev SSH key when missing.
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then key="${HOME}/${key#\~/}"; fi
+        mkdir -p "$(dirname "${key}")"
+        test -e "${key}" || ssh-keygen -t ed25519 -a 100 -N '{{default "" .PRIVATE_DEV_SSH_PASSPHRASE}}' -f "${key}" -C '{{.PRIVATE_DEV_SSH_USER}}@private-dev'
+
+  private-dev:ssh-config:
+    desc: Generate node1 and node2-node6 ProxyJump SSH aliases.
+    deps:
+      - private-dev:ssh-keygen
+    cmds:
+      - |
+        set -eu
+        config='{{.PRIVATE_DEV_SSH_CONFIG}}'
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then key="${HOME}/${key#\~/}"; fi
+        mkdir -p "$(dirname "${config}")"
+        umask 077
+        {
+          printf 'Host private-dev-node1 node1\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ForwardAgent yes\n  StrictHostKeyChecking accept-new\n\n' '{{.PRIVATE_DEV_NODE1_HOST}}' '{{.PRIVATE_DEV_NODE1_PORT}}' '{{.PRIVATE_DEV_SSH_USER}}' "${key}"
+          for node in 2 3 4 5 6; do
+            eval "host=\${PRIVATE_DEV_NODE${node}_HOST}"
+            printf 'Host node%s\n  HostName %s\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ProxyJump private-dev-node1\n  StrictHostKeyChecking accept-new\n\n' "${node}" "${host}" '{{.PRIVATE_DEV_SSH_USER}}' "${key}"
+          done
+        } > "${config}"
+
+  private-dev:ssh-setup-all:
+    desc: Install the local public key on all private-dev nodes through node1.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - |
+        set -eu
+        key='{{.PRIVATE_DEV_SSH_KEY}}'
+        if [ "${key#\~/}" != "${key}" ]; then key="${HOME}/${key#\~/}"; fi
+        for host in private-dev-node1 node2 node3 node4 node5 node6; do
+          ssh -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -o BatchMode=yes "${host}" true >/dev/null 2>&1 || \
+            ssh-copy-id -F '{{.PRIVATE_DEV_SSH_CONFIG}}' -i "${key}.pub" "${host}"
+        done
+
+  ssh:private-dev:
+    desc: Open an agent-forwarded SSH session to private-dev node1.
+    deps:
+      - private-dev:ssh-config
+    cmds:
+      - ssh -A -F '{{.PRIVATE_DEV_SSH_CONFIG}}' private-dev-node1
+
+  ansible:ping:
+    desc: Verify private-dev SSH reachability with Ansible.
+    deps:
+      - inventory:check
+      - private-dev:ssh-config
+    cmds:
+      - ansible {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i '{{.ANSIBLE_INVENTORY}}' all -m ping
+
+  syntax:
+    desc: Syntax-check every active private-dev playbook.
+    deps:
+      - inventory:check
+    cmds:
+      - ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/longhorn.yml playbooks/registry.yml playbooks/secrets.yml playbooks/observability-storage.yml {{.CLI_ARGS}}
+
+  private-dev:kubernetes:
+    desc: Install and verify the private-dev kubeadm cluster.
+    cmds:
+      - task playbook PLAYBOOK=kubernetes.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task playbook PLAYBOOK=node-labels.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task playbook PLAYBOOK=helm.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task playbook PLAYBOOK=verify.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:argocd:
+    desc: Install Argo CD and the private-dev root Application.
+    cmds:
+      - task playbook PLAYBOOK=argocd.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:longhorn:
+    desc: Prepare private-dev Longhorn host prerequisites.
+    cmds:
+      - task playbook PLAYBOOK=longhorn.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:registry:
+    desc: Configure the private-dev registry.
+    cmds:
+      - task playbook PLAYBOOK=registry.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:secrets:
+    desc: Create private-dev Kubernetes Secrets from operator environment variables.
+    cmds:
+      - task playbook PLAYBOOK=secrets.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  private-dev:bootstrap:
+    desc: Validate, connect, and run the complete private-dev site playbook.
+    cmds:
+      - task inventory:check
+      - task syntax
+      - task ansible:ping
+      - task playbook PLAYBOOK=site.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  playbook:
+    internal: true
+    requires:
+      vars:
+        - PLAYBOOK
+    cmds:
+      - ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} {{.ANSIBLE_BECOME_ARGS}} -i '{{.ANSIBLE_INVENTORY}}' 'playbooks/{{.PLAYBOOK}}' {{.CLI_ARGS}}

@@ -1,0 +1,7 @@
+---
+containerd_config_path: /etc/containerd/config.toml
+containerd_registry_config_path: /etc/containerd/certs.d
+local_registry_enabled: false
+local_registry_host: 127.0.0.1
+local_registry_port: "5000"
+local_registry_endpoint: "{{ local_registry_host }}:{{ local_registry_port }}"

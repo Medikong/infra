@@ -1,0 +1,40 @@
+project_name    = "medikong"
+environment_name = "dev"
+owner           = "platform-team"
+aws_region      = "ap-northeast-2"
+
+vpc_cidr             = "10.20.0.0/16"
+availability_zones    = ["ap-northeast-2a", "ap-northeast-2b", "ap-northeast-2c"]
+public_subnet_cidrs   = ["10.20.10.0/24", "10.20.20.0/24", "10.20.30.0/24"]
+
+# Set both paths to enable SSH tunneled through AWS Systems Manager.
+public_key_path  = "~/.ssh/k8s-key.pub"
+private_key_path = "~/.ssh/k8s-key"
+
+control_plane_instance_type        = "t4g.medium"
+platform_worker_instance_type      = "t4g.large"
+app_worker_instance_types          = ["t4g.medium", "t4g.medium"]
+data_worker_instance_types         = ["t4g.medium", "t4g.medium"]
+observability_worker_instance_type = "r6g.medium"
+t_instance_cpu_credits             = "standard"
+
+control_plane_volume_size        = 20
+platform_worker_volume_size      = 20
+app_worker_volume_sizes          = [20, 20]
+data_worker_volume_sizes         = [20, 20]
+observability_worker_volume_size = 20
+
+# Run EC2 for 10 hours/day on 10 active days, while retaining the seven
+# 20 GiB node root volumes for the original 3-week window. Dev database and
+# LGTM data use node-local capacity, so no additional workload EBS is modeled.
+# The stress exchange rate is intentionally higher than the 2026-07-10 IMF
+# representative rate so the VAT-inclusive estimate stays below KRW 100,000.
+budget_limit_krw                   = 100000
+budget_exchange_rate_krw_per_usd  = 1600
+vat_rate                           = 0.10
+variable_cost_reserve_krw          = 10000
+daily_runtime_hours                = 10
+runtime_days                       = 10
+retention_days                     = 21
+
+root_volume_kms_key_id = null

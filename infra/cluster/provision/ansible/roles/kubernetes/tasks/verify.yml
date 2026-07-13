@@ -1,0 +1,58 @@
+---
+- name: Check Kubernetes admin kubeconfig
+  ansible.builtin.stat:
+    path: "{{ kubernetes_admin_conf_path }}"
+  register: verify_admin_conf
+
+- name: Require initialized Kubernetes cluster
+  ansible.builtin.assert:
+    that: verify_admin_conf.stat.exists
+    fail_msg: Kubernetes admin kubeconfig is missing.
+
+- name: Read registered Kubernetes node names
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - get
+      - nodes
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{"\n"}{end}'
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: verify_node_names
+  changed_when: false
+
+- name: Require every inventory node in Kubernetes
+  ansible.builtin.assert:
+    that: groups['k8s_cluster'] | difference(verify_node_names.stdout_lines) | length == 0
+    fail_msg: "Missing Kubernetes nodes: {{ groups['k8s_cluster'] | difference(verify_node_names.stdout_lines) }}"
+
+- name: Wait for all Kubernetes nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - wait
+      - --for=condition=Ready
+      - nodes
+      - --all
+      - "--timeout={{ kubernetes_node_ready_timeout }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  changed_when: false
+
+- name: Show Kubernetes nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - get
+      - nodes
+      - -o
+      - wide
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: verify_node_summary
+  changed_when: false
+
+- name: Print Kubernetes node summary
+  ansible.builtin.debug:
+    var: verify_node_summary.stdout_lines

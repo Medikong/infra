@@ -7,13 +7,18 @@
 - 루트 `Taskfile.yml`은 개발자가 자주 쓰는 진입점을 소유 폴더로 위임하는 프록시 역할만 한다.
 - 루트 `Taskfile.yml`에는 환경별 접속 정보, 노드 IP, 사용자명, key path 같은 구현 설정을 두지 않는다.
 - 루트 프록시가 가리키는 소유 폴더의 `Taskfile.yml`을 이어서 읽고 실제 구현과 검증 명령을 확인한다.
-- 동일한 기능의 명령어에서  추가 인자를 받아야하는 경우  명렁어 수를 늘리지말고 `--` 뒤에 추가 인자를 붙여서 전달한다. (예: `task infra:cluster:provision:ansible-lab -- --limit node1`)
+- 동일한 기능의 명령어에서 추가 인자를 받아야 하는 경우 명령어 수를 늘리지 말고 `--` 뒤에 전달한다. (예: `task private-dev:bootstrap -- --limit node1`)
 
 ## 레포 폴더 구조
 
-- `terraform/`: AWS 인프라 리소스를 정의한다.
-- `infra/cluster/`: Kubernetes 클러스터 구성, 토폴로지, 프로비저닝 작업을 다룬다.
-- `infra/cluster/provision/ansible-lab/`: 온프레미스/lab 환경의 Ansible inventory, playbook, config, Taskfile을 관리한다.
+- `terraform/foundation/`: Terraform 상태 저장용 S3 버킷, GitHub Actions OIDC provider와 배포용 IAM Role을 별도 state로 관리한다.
+- `terraform/shared/`: ECR처럼 환경 전체에서 공유하는 고정 AWS 자원과 별도 state를 정의한다.
+- `terraform/environments/<env>/`: VPC, SSM 관리 경로, self-managed Kubernetes 노드처럼 환경별 AWS 자원과 별도 state를 정의한다.
+- `terraform/Taskfile.yml`: Terraform 명령 구현을 소유한다. 루트 Taskfile은 이 명령을 프록시만 한다.
+- `infra/cluster/`: Kubernetes 클러스터 프로비저닝 작업을 다룬다.
+- `infra/cluster/provision/ansible/roles/`: 환경이 공유하는 Kubernetes 설치 role을 관리한다.
+- `infra/cluster/provision/ansible/environments/private-dev/`: private-dev inventory, playbook, config, Taskfile을 관리한다.
+- `infra/cluster/provision/ansible/environments/aws-dev/`: Terraform inventory를 사용하는 aws-dev playbook과 Taskfile을 관리한다.
 - `k8s/`: Kubernetes 기본 매니페스트, 네임스페이스, 네트워크 정책, 스토리지, Kong/MetalLB 같은 클러스터 리소스를 둔다.
 - `.local/`: 개발 장비에서 생성되는 로컬 전용 파일 위치다. 커밋하지 않는다.
 - 루트 `Taskfile.yml`: 위 폴더들의 작업을 직접 구현하지 않고, 자주 쓰는 진입점만 연결한다.
@@ -30,5 +35,5 @@
 
 - private-dev SSH/bootstrap 변경과 무관한 Terraform 또는 README 변경은 사용자가 명시하지 않는 한 같은 커밋에 포함하지 않는다.
 - 루트 Taskfile을 수정했다면 루트 `Taskfile.yml`을 다시 읽고 프록시 범위만 유지되는지 확인한다.
-- ansible-lab Taskfile을 수정했다면 `infra/cluster/provision/ansible-lab/Taskfile.yml`과 `configs/private-dev.env`를 함께 확인한다.
+- 환경 Taskfile을 수정했다면 같은 환경의 inventory, `group_vars/all.yml`, `playbooks/site.yml`을 함께 확인한다.
 - 검증 명령은 문서에 적힌 예시보다 현재 Taskfile의 실제 task 정의를 우선한다.

@@ -1,0 +1,7 @@
+---
+- import_playbook: node-access.yml
+- import_playbook: kubernetes.yml
+- import_playbook: node-labels.yml
+- import_playbook: helm.yml
+- import_playbook: verify.yml
+- import_playbook: argocd.yml

@@ -1,0 +1,11 @@
+---
+calico_version: v3.31.4
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml"
+calico_local_manifest_path: "/tmp/calico-{{ calico_version }}-local-registry.yaml"
+calico_node_ready_timeout: 600s
+calico_image_pull_timeout: 300s
+calico_images:
+  - "quay.io/calico/cni:{{ calico_version }}"
+  - "quay.io/calico/node:{{ calico_version }}"
+  - "quay.io/calico/kube-controllers:{{ calico_version }}"
+use_upstream_calico_images: true

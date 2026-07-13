@@ -1,0 +1,150 @@
+resource "aws_iam_openid_connect_provider" "github_actions" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  tags = {
+    Name = "github-actions"
+  }
+}
+
+data "aws_iam_policy_document" "github_actions_assume_role" {
+  statement {
+    sid     = "GitHubActionsOidc"
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = local.github_oidc_subjects
+    }
+  }
+}
+
+resource "aws_iam_role" "github_actions" {
+  name                 = var.github_actions_role_name
+  assume_role_policy   = data.aws_iam_policy_document.github_actions_assume_role.json
+  max_session_duration = var.github_actions_role_max_session_seconds
+
+  tags = {
+    Name = var.github_actions_role_name
+  }
+}
+
+data "aws_iam_policy_document" "github_actions" {
+  statement {
+    sid = "TerraformStateBucket"
+    actions = [
+      "s3:GetBucketLocation",
+      "s3:ListBucket",
+    ]
+    resources = [aws_s3_bucket.terraform_state.arn]
+  }
+
+  statement {
+    sid = "TerraformStateObjects"
+    actions = [
+      "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
+    ]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/*"]
+  }
+
+  statement {
+    sid       = "Ec2Infrastructure"
+    actions   = ["ec2:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "EcrRepositories"
+    actions = [
+      "ecr:CreateRepository",
+      "ecr:DeleteLifecyclePolicy",
+      "ecr:DeleteRepository",
+      "ecr:DescribeRepositories",
+      "ecr:GetLifecyclePolicy",
+      "ecr:ListTagsForResource",
+      "ecr:PutImageScanningConfiguration",
+      "ecr:PutImageTagMutability",
+      "ecr:PutLifecyclePolicy",
+      "ecr:TagResource",
+      "ecr:UntagResource",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${local.account_id}:repository/*"]
+  }
+
+  statement {
+    sid       = "EcrAuthorization"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "KubernetesNodeIam"
+    actions = [
+      "iam:AddRoleToInstanceProfile",
+      "iam:AttachRolePolicy",
+      "iam:CreateInstanceProfile",
+      "iam:CreateRole",
+      "iam:DeleteInstanceProfile",
+      "iam:DeleteRole",
+      "iam:DetachRolePolicy",
+      "iam:GetInstanceProfile",
+      "iam:GetRole",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfilesForRole",
+      "iam:ListRoleTags",
+      "iam:PassRole",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:TagInstanceProfile",
+      "iam:TagRole",
+      "iam:UntagInstanceProfile",
+      "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+    ]
+    resources = [
+      "arn:aws:iam::${local.account_id}:instance-profile/${var.project_name}-*",
+      "arn:aws:iam::${local.account_id}:role/${var.project_name}-*",
+    ]
+  }
+
+  statement {
+    sid = "SystemsManager"
+    actions = [
+      "ssm:DescribeInstanceInformation",
+      "ssm:DescribeSessions",
+      "ssm:GetConnectionStatus",
+      "ssm:GetParameter",
+      "ssm:ResumeSession",
+      "ssm:StartSession",
+      "ssm:TerminateSession",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "CallerIdentity"
+    actions   = ["sts:GetCallerIdentity"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions" {
+  name   = "${var.project_name}-infrastructure-deployment"
+  role   = aws_iam_role.github_actions.id
+  policy = data.aws_iam_policy_document.github_actions.json
+}

@@ -1,0 +1,56 @@
+[control_plane]
+%{ for name, node in nodes ~}
+%{ if node.role == "control-plane" ~}
+${name} ansible_host=${node.instance_id} node_ip=${node.private_ip} ansible_user=ubuntu node_labels='${node.node_labels}' node_taints='${node.node_taints}'
+%{ endif ~}
+%{ endfor ~}
+
+[workers]
+%{ for name, node in nodes ~}
+%{ if node.role == "worker" ~}
+${name} ansible_host=${node.instance_id} node_ip=${node.private_ip} ansible_user=ubuntu node_labels='${node.node_labels}' node_taints='${node.node_taints}'
+%{ endif ~}
+%{ endfor ~}
+
+[app_workers]
+%{ for name, node in nodes ~}
+%{ if node.workload == "app" || node.workload == "app-data" ~}
+${name}
+%{ endif ~}
+%{ endfor ~}
+
+[platform_workers]
+%{ for name, node in nodes ~}
+%{ if node.workload == "platform" && node.role == "worker" ~}
+${name}
+%{ endif ~}
+%{ endfor ~}
+
+[data_workers]
+%{ for name, node in nodes ~}
+%{ if node.workload == "data" || node.workload == "app-data" ~}
+${name}
+%{ endif ~}
+%{ endfor ~}
+
+[observability_workers]
+%{ for name, node in nodes ~}
+%{ if node.workload == "observability" ~}
+${name}
+%{ endif ~}
+%{ endfor ~}
+
+[kube_control_plane:children]
+control_plane
+
+[kube_workers:children]
+workers
+
+[k8s_cluster:children]
+control_plane
+workers
+
+[k8s_cluster:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_private_key_file=${private_key_path}
+ansible_ssh_common_args='-o ProxyCommand="aws ssm start-session --region ${aws_region} --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p" -o StrictHostKeyChecking=accept-new'

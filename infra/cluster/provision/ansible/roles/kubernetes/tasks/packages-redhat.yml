@@ -1,0 +1,18 @@
+---
+- name: Add Kubernetes rpm repository
+  ansible.builtin.yum_repository:
+    name: kubernetes
+    description: Kubernetes
+    baseurl: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_release }}/rpm/"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_release }}/rpm/repodata/repomd.xml.key"
+
+- name: Install Kubernetes rpm packages
+  ansible.builtin.dnf:
+    name:
+      - cri-tools
+      - kubeadm
+      - kubectl
+      - kubelet
+    state: present

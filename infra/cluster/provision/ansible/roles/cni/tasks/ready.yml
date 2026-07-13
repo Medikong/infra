@@ -1,0 +1,76 @@
+---
+- name: Wait for all expected Kubernetes nodes
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - get
+      - nodes
+      - -o
+      - 'jsonpath={range .items[*]}{.metadata.name}{"\n"}{end}'
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: cluster_node_names
+  changed_when: false
+  retries: 30
+  delay: 5
+  until: groups['k8s_cluster'] | difference(cluster_node_names.stdout_lines) | length == 0
+
+- name: Wait for Calico node agents
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - wait
+      - --for=condition=Ready
+      - pod
+      - -n
+      - kube-system
+      - -l
+      - k8s-app=calico-node
+      - "--timeout={{ calico_node_ready_timeout }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  changed_when: false
+
+- name: Wait for Kubernetes nodes to become Ready
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - wait
+      - --for=condition=Ready
+      - nodes
+      - --all
+      - "--timeout={{ kubernetes_node_ready_timeout }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  changed_when: false
+
+- name: Set CoreDNS replica count for control-plane topology
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - -n
+      - kube-system
+      - patch
+      - deployment
+      - coredns
+      - --type=merge
+      - -p
+      - '{"spec":{"replicas":{{ 2 if groups["control_plane"] | length > 1 else 1 }}}}'
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: coredns_replica_patch
+  changed_when: "'patched' in coredns_replica_patch.stdout and 'no change' not in coredns_replica_patch.stdout"
+
+- name: Wait for CoreDNS
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - rollout
+      - status
+      - deployment/coredns
+      - -n
+      - kube-system
+      - "--timeout={{ kubernetes_node_ready_timeout }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  changed_when: false

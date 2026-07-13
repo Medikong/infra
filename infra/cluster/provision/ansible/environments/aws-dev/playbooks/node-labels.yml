@@ -1,0 +1,9 @@
+---
+- name: Apply Terraform-provided aws-dev node labels and taints
+  hosts: "control_plane[0]"
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - node-labels

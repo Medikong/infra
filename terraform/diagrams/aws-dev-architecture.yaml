@@ -1,0 +1,212 @@
+Diagram:
+  DefinitionFiles:
+    - Type: URL
+      Url: "https://raw.githubusercontent.com/awslabs/diagram-as-code/main/definitions/definition-for-aws-icons-light.yaml"
+  Resources:
+    Canvas:
+      Type: AWS::Diagram::Canvas
+      Direction: vertical
+      Children:
+        - Operator
+        - AWSCloud
+
+    Operator:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: Platform Operator
+
+    AWSCloud:
+      Type: AWS::Diagram::Cloud
+      Preset: AWSCloudNoLogo
+      Title: AWS ap-northeast-2 / dev / 10 active days in a 3-week window
+      Direction: vertical
+      Align: center
+      Children:
+        - SharedResources
+        - DevVPC
+
+    SharedResources:
+      Type: AWS::Diagram::HorizontalStack
+      Title: Fixed shared resources and budget guardrail
+      Children:
+        - TerraformState
+        - ServiceECR
+        - BudgetGuard
+
+    TerraformState:
+      Type: AWS::S3::Bucket
+      Title: S3 remote state
+
+    ServiceECR:
+      Type: AWS::ECR
+      Title: Shared ECR repositories
+
+    BudgetGuard:
+      Type: AWS::Diagram::Resource
+      Title: Estimated bill / KRW 83,878 + KRW 10,000 reserve
+
+    DevVPC:
+      Type: AWS::EC2::VPC
+      Title: aws-dev VPC / 10.20.0.0/16 / no NAT or NLB
+      Direction: vertical
+      Children:
+        - AvailabilityZones
+      BorderChildren:
+        - Position: S
+          Resource: InternetGateway
+
+    AvailabilityZones:
+      Type: AWS::Diagram::HorizontalStack
+      Title: Environment resources / 7 Kubernetes nodes across 3 AZs
+      Children:
+        - AvailabilityZoneA
+        - AvailabilityZoneB
+        - AvailabilityZoneC
+
+    AvailabilityZoneA:
+      Type: AWS::EC2::AvailabilityZone
+      Title: ap-northeast-2a
+      Direction: vertical
+      Children:
+        - PublicSubnetA
+
+    PublicSubnetA:
+      Type: AWS::EC2::Subnet
+      Preset: PublicSubnet
+      Title: Public subnet A / 10.20.10.0/24
+      Direction: horizontal
+      Children:
+        - ControlPlane1
+        - PlatformWorker
+        - ObservabilityWorker
+
+    ControlPlane1:
+      Type: AWS::EC2::Instance
+      Title: Control plane / t4g.medium / 20 GiB
+
+    PlatformWorker:
+      Type: AWS::EC2::Instance
+      Title: Platform / t4g.large / 8 GiB / 20 GiB disk
+
+    ObservabilityWorker:
+      Type: AWS::EC2::Instance
+      Title: LGTM / r6g.medium / 8 GiB / 20 GiB local disk
+
+    AvailabilityZoneB:
+      Type: AWS::EC2::AvailabilityZone
+      Title: ap-northeast-2b
+      Direction: vertical
+      Children:
+        - PublicSubnetB
+
+    PublicSubnetB:
+      Type: AWS::EC2::Subnet
+      Preset: PublicSubnet
+      Title: Public subnet B / 10.20.20.0/24
+      Direction: horizontal
+      Children:
+        - AppWorker1
+        - DataWorker1
+
+    AppWorker1:
+      Type: AWS::EC2::Instance
+      Title: App worker 1 / t4g.medium
+
+    DataWorker1:
+      Type: AWS::EC2::Instance
+      Title: Data worker 1 / t4g.medium
+
+    AvailabilityZoneC:
+      Type: AWS::EC2::AvailabilityZone
+      Title: ap-northeast-2c
+      Direction: vertical
+      Children:
+        - PublicSubnetC
+
+    PublicSubnetC:
+      Type: AWS::EC2::Subnet
+      Preset: PublicSubnet
+      Title: Public subnet C / 10.20.30.0/24
+      Direction: horizontal
+      Children:
+        - AppWorker2
+        - DataWorker2
+
+    AppWorker2:
+      Type: AWS::EC2::Instance
+      Title: App worker 2 / t4g.medium
+
+    DataWorker2:
+      Type: AWS::EC2::Instance
+      Title: Data worker 2 / t4g.medium
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Title: Internet Gateway / outbound and public IPv4
+      IconFill:
+        Type: rect
+
+    ApplicationPool:
+      Type: AWS::Diagram::Resource
+      Title: Application pool / minimum 7 services
+      SpanResources:
+        - AppWorker1
+        - AppWorker2
+      BorderType: Dashed
+
+    DataPool:
+      Type: AWS::Diagram::Resource
+      Title: Data pool / 7 service DB targets / node-local quotas
+      SpanResources:
+        - DataWorker1
+        - DataWorker2
+      BorderType: Dashed
+
+    KubernetesCluster:
+      Type: AWS::Diagram::Resource
+      Title: Kubernetes / 1 control plane + 6 workers / 20 GiB per node
+      SpanResources:
+        - ControlPlane1
+        - PlatformWorker
+        - ObservabilityWorker
+        - AppWorker1
+        - DataWorker1
+        - AppWorker2
+        - DataWorker2
+      BorderType: Dashed
+
+  Links:
+    - Source: Operator
+      SourcePosition: SSE
+      Target: TerraformState
+      TargetPosition: N
+      Type: orthogonal
+      TargetArrowHead:
+        Type: Open
+
+    - Source: Operator
+      SourcePosition: SSW
+      Target: ControlPlane1
+      TargetPosition: N
+      Type: orthogonal
+      TargetArrowHead:
+        Type: Open
+      Labels:
+        AutoRight:
+          Title: Systems Manager session
+
+    - Source: ServiceECR
+      SourcePosition: S
+      Target: AppWorker1
+      TargetPosition: N
+      Type: orthogonal
+      TargetArrowHead:
+        Type: Open
+
+    - Source: ServiceECR
+      SourcePosition: S
+      Target: AppWorker2
+      TargetPosition: N
+      Type: orthogonal
+      TargetArrowHead:
+        Type: Open

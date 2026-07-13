@@ -1,0 +1,62 @@
+---
+- name: Prepare aws-dev Ubuntu ARM64 Kubernetes hosts
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+  pre_tasks:
+    - name: Require Ubuntu ARM64 nodes
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_architecture in ["aarch64", "arm64"]
+        fail_msg: aws-dev requires Ubuntu ARM64 nodes from Terraform.
+  roles:
+    - base-os
+    - containerd
+    - kubernetes
+    - role: cni
+      tasks_from: prepare
+
+- name: Initialize aws-dev primary control plane
+  hosts: "control_plane[0]"
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - control-plane
+    - cni
+
+- name: Join aws-dev additional control planes
+  hosts: "control_plane[1:]"
+  serial: 1
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - role: control-plane
+      tasks_from: join
+
+- name: Join aws-dev workers
+  hosts: workers
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - worker
+
+- name: Finish aws-dev Kubernetes services
+  hosts: "control_plane[0]"
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - role: cni
+      tasks_from: ready
+    - role: kubernetes
+      tasks_from: metrics

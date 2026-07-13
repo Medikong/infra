@@ -1,0 +1,36 @@
+---
+- name: Remove deprecated Longhorn labels
+  ansible.builtin.command:
+    cmd: kubectl label node {{ item }} medikong.io/storage-node- node.longhorn.io/create-default-disk- --overwrite
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  loop: "{{ groups['k8s_cluster'] }}"
+  register: deprecated_label_removal
+  failed_when:
+    - deprecated_label_removal.rc != 0
+    - "'not labeled' not in deprecated_label_removal.stderr"
+  changed_when:
+    - deprecated_label_removal.rc == 0
+    - "'not labeled' not in deprecated_label_removal.stderr"
+
+- name: Apply inventory node labels
+  ansible.builtin.command:
+    cmd: kubectl label node {{ item }} {{ hostvars[item].node_labels }} --overwrite
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  loop: "{{ groups['k8s_cluster'] }}"
+  when:
+    - hostvars[item].node_labels is defined
+    - hostvars[item].node_labels | length > 0
+  changed_when: false
+
+- name: Apply inventory node taints
+  ansible.builtin.command:
+    cmd: kubectl taint node {{ item }} {{ hostvars[item].node_taints }} --overwrite
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  loop: "{{ groups['k8s_cluster'] }}"
+  when:
+    - hostvars[item].node_taints is defined
+    - hostvars[item].node_taints | length > 0
+  changed_when: false

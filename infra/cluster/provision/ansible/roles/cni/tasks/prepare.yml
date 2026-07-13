@@ -1,0 +1,20 @@
+---
+- name: Pre-pull Calico images from private-dev registry
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "{{ calico_image_pull_timeout }}"
+      - crictl
+      - --runtime-endpoint
+      - "{{ kubernetes_cri_socket }}"
+      - pull
+      - "{{ local_registry_endpoint }}/{{ item }}"
+  loop: "{{ calico_images }}"
+  register: calico_image_pull
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: calico_image_pull.rc == 0
+  when:
+    - local_registry_enabled | bool
+    - not (use_upstream_calico_images | bool)

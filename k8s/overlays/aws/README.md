@@ -1,13 +1,15 @@
-# AWS smoke overlay
+# Legacy AWS smoke overlay
+
+> 이 폴더는 과거 `smoke1` 검증 기록입니다. 현재 AWS dev 배포에는 사용하지 않으며, Terraform은 NLB를 만들지 않습니다. 현재 Kubernetes 배포 선언은 GitOps 저장소가 소유합니다.
 
 This overlay is for the `smoke1` kubeadm cluster on EC2.
 
-It intentionally differs from the local Vagrant overlay:
+It intentionally differs from the retired local VM overlay:
 
 - Application images are pulled from ECR with the `smoke1` tag.
 - MetalLB is not included.
 - NodePort is not used.
-- External HTTP traffic is expected to enter through the Terraform-managed NLB and Kong.
+- The historical smoke environment expected a Terraform-managed NLB. That assumption does not apply to the current AWS dev architecture.
 
 ## Smoke scaling baseline
 
@@ -23,7 +25,7 @@ resources:
     memory: 512Mi
 ```
 
-This is a small smoke-test baseline for the current two-worker EC2 cluster, not a production sizing result. Treat it as suitable for a demo or light functional test, roughly tens of concurrent users depending on endpoint behavior and database/Kafka load.
+This is a small smoke-test baseline for the historical two-worker EC2 cluster, not a production sizing result. Treat it as suitable for a demo or light functional test, roughly tens of concurrent users depending on endpoint behavior and database/Kafka load.
 
 Use load testing and metrics before claiming a real user capacity. For a production-like setup, add Metrics Server, HPA, Prometheus/Grafana, and tune the requests from measured CPU and memory usage.
 
@@ -37,11 +39,7 @@ averageUtilization: 60
 
 Metrics Server must be running before HPA can make decisions. In this kubeadm environment, install it with the AWS inventory:
 
-```bash
-cd infra/cluster
-make ANSIBLE_INVENTORY=provision/ansible/inventories/aws/smoke1.ini metrics-bootstrap
-make ANSIBLE_INVENTORY=provision/ansible/inventories/aws/smoke1.ini metrics-verify
-```
+현재 aws-dev Metrics Server는 `task aws-dev:bootstrap WORKSPACE=<workspace>`의 공통 Kubernetes role에서 설치합니다. 이 smoke overlay에는 활성 Ansible inventory가 없습니다.
 
 ## Smoke storage model
 

@@ -1,0 +1,125 @@
+version: "3"
+
+env:
+  ANSIBLE_CONFIG: ../../ansible.cfg
+
+vars:
+  ROOT_DIR: '{{.TASKFILE_DIR}}/../../../../../..'
+  WORKSPACE: '{{default "dev" .WORKSPACE}}'
+  ANSIBLE_INVENTORY: '{{default (printf "%s/.local/terraform/%s/inventory.ini" .ROOT_DIR .WORKSPACE) .ANSIBLE_INVENTORY}}'
+  ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
+  CONNECT_RETRIES: '{{default "30" .CONNECT_RETRIES}}'
+  CONNECT_DELAY: '{{default "10" .CONNECT_DELAY}}'
+  SHARED_BACKEND_CONFIG: '{{default "" .SHARED_BACKEND_CONFIG}}'
+  ENVIRONMENT_BACKEND_CONFIG: '{{default "" .ENVIRONMENT_BACKEND_CONFIG}}'
+  VAR_FILE: '{{default "" .VAR_FILE}}'
+
+tasks:
+  default:
+    desc: Show aws-dev Ansible tasks.
+    cmds:
+      - task --list
+
+  inventory:generate:
+    desc: Generate the aws-dev inventory from the selected Terraform workspace.
+    cmds:
+      - task -d '{{.ROOT_DIR}}/terraform' inventory ENV=dev WORKSPACE='{{.WORKSPACE}}'
+
+  inventory:check:
+    desc: Validate the Terraform-generated aws-dev inventory contract.
+    cmds:
+      - |
+        set -eu
+        inventory='{{.ANSIBLE_INVENTORY}}'
+        test -f "${inventory}" || {
+          printf 'Missing Terraform inventory: %s\nRun: task terraform:inventory ENV=dev WORKSPACE=%s\n' "${inventory}" '{{.WORKSPACE}}' >&2
+          exit 2
+        }
+        grep -q '^\[control_plane\]' "${inventory}"
+        grep -q '^\[workers\]' "${inventory}"
+        grep -q 'AWS-StartSSHSession' "${inventory}"
+        grep -q 'ansible_user=ubuntu' "${inventory}"
+
+  ansible:ping:
+    desc: Verify aws-dev SSM-backed Ansible connectivity.
+    deps:
+      - inventory:check
+    cmds:
+      - |
+        set -eu
+        attempt=1
+        while ! ansible {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' all -m ping; do
+          if [ "${attempt}" -ge '{{.CONNECT_RETRIES}}' ]; then
+            printf 'AWS dev nodes did not become reachable after %s attempts.\n' "${attempt}" >&2
+            exit 2
+          fi
+          attempt=$((attempt + 1))
+          sleep '{{.CONNECT_DELAY}}'
+        done
+
+  syntax:
+    desc: Syntax-check every aws-dev playbook.
+    deps:
+      - inventory:check
+    cmds:
+      - ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/verify.yml {{.CLI_ARGS}}
+
+  aws-dev:kubernetes:
+    desc: Install the aws-dev kubeadm cluster.
+    cmds:
+      - task playbook PLAYBOOK=kubernetes.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  aws-dev:node-labels:
+    desc: Apply Terraform-provided aws-dev node labels and taints.
+    cmds:
+      - task playbook PLAYBOOK=node-labels.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  aws-dev:helm:
+    desc: Install Helm on aws-dev.
+    cmds:
+      - task playbook PLAYBOOK=helm.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  aws-dev:verify:
+    desc: Verify aws-dev Kubernetes readiness.
+    cmds:
+      - task playbook PLAYBOOK=verify.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  aws-dev:bootstrap:
+    internal: true
+    desc: Create the AWS dev infrastructure and bootstrap Kubernetes.
+    cmds:
+      - task -d '{{.ROOT_DIR}}/terraform' init STACK=shared BACKEND_CONFIG='{{.SHARED_BACKEND_CONFIG}}'
+      - task -d '{{.ROOT_DIR}}/terraform' plan STACK=shared
+      - task -d '{{.ROOT_DIR}}/terraform' apply STACK=shared
+      - task aws-dev:apply WORKSPACE='{{.WORKSPACE}}' ENVIRONMENT_BACKEND_CONFIG='{{.ENVIRONMENT_BACKEND_CONFIG}}' VAR_FILE='{{.VAR_FILE}}'
+
+  aws-dev:apply:
+    internal: true
+    desc: Apply AWS dev infrastructure and Kubernetes configuration changes.
+    cmds:
+      - task -d '{{.ROOT_DIR}}/terraform' init STACK=environment ENV=dev BACKEND_CONFIG='{{.ENVIRONMENT_BACKEND_CONFIG}}'
+      - task -d '{{.ROOT_DIR}}/terraform' workspace ENV=dev WORKSPACE='{{.WORKSPACE}}'
+      - task -d '{{.ROOT_DIR}}/terraform' plan STACK=environment ENV=dev WORKSPACE='{{.WORKSPACE}}' VAR_FILE='{{.VAR_FILE}}'
+      - task -d '{{.ROOT_DIR}}/terraform' apply STACK=environment ENV=dev WORKSPACE='{{.WORKSPACE}}'
+      - task ansible:bootstrap
+
+  aws-dev:configure:
+    desc: Configure Kubernetes after applying a saved Terraform plan.
+    cmds:
+      - task ansible:bootstrap
+
+  ansible:bootstrap:
+    internal: true
+    cmds:
+      - task inventory:check
+      - task syntax
+      - task ansible:ping
+      - task playbook PLAYBOOK=site.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  playbook:
+    internal: true
+    requires:
+      vars:
+        - PLAYBOOK
+    cmds:
+      - ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' 'playbooks/{{.PLAYBOOK}}' {{.CLI_ARGS}}

@@ -1,0 +1,414 @@
+version: "3"
+
+vars:
+  ENV: '{{default "dev" .ENV}}'
+  STACK: '{{default "environment" .STACK}}'
+  WORKSPACE: '{{default .ENV .WORKSPACE}}'
+
+tasks:
+  default:
+    desc: Show Terraform entrypoints.
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Format Terraform files. Set CHECK=true for a read-only check.
+    cmds:
+      - |
+        set -eu
+        if [ '{{default "false" .CHECK}}' = 'true' ]; then
+          terraform fmt -recursive -check -diff {{.CLI_ARGS}}
+        else
+          terraform fmt -recursive {{.CLI_ARGS}}
+        fi
+
+  validate:
+    desc: Initialize providers without a backend and validate every Terraform root.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        data_root="${root_dir}/../.local/terraform/validate"
+        mkdir -p "${data_root}/foundation" "${data_root}/shared"
+        TF_DATA_DIR="${data_root}/foundation" terraform -chdir=foundation init -backend=false -input=false
+        TF_DATA_DIR="${data_root}/foundation" terraform -chdir=foundation validate
+        TF_DATA_DIR="${data_root}/shared" terraform -chdir=shared init -backend=false -input=false
+        TF_DATA_DIR="${data_root}/shared" terraform -chdir=shared validate
+        for environment_dir in environments/*; do
+          [ -d "${environment_dir}" ] || continue
+          environment_name="$(basename "${environment_dir}")"
+          data_dir="${data_root}/environment-${environment_name}"
+          mkdir -p "${data_dir}"
+          TF_DATA_DIR="${data_dir}" terraform -chdir="${environment_dir}" init -backend=false -input=false
+          TF_DATA_DIR="${data_dir}" terraform -chdir="${environment_dir}" validate
+        done
+
+  test:
+    desc: Run Terraform tests with mocked AWS providers.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        data_root="${root_dir}/../.local/terraform/test"
+        mkdir -p "${data_root}/foundation" "${data_root}/shared"
+        TF_DATA_DIR="${data_root}/foundation" terraform -chdir=foundation init -backend=false -input=false
+        TF_DATA_DIR="${data_root}/foundation" terraform -chdir=foundation test
+        TF_DATA_DIR="${data_root}/shared" terraform -chdir=shared init -backend=false -input=false
+        TF_DATA_DIR="${data_root}/shared" terraform -chdir=shared test
+        for environment_dir in environments/*; do
+          [ -d "${environment_dir}" ] || continue
+          environment_name="$(basename "${environment_dir}")"
+          data_dir="${data_root}/environment-${environment_name}"
+          mkdir -p "${data_dir}"
+          TF_DATA_DIR="${data_dir}" terraform -chdir="${environment_dir}" init -backend=false -input=false
+          TF_DATA_DIR="${data_dir}" terraform -chdir="${environment_dir}" test
+        done
+
+  foundation:bootstrap:
+    desc: Create the state bucket, GitHub OIDC provider, and deployment role, then migrate foundation state to S3.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        foundation_dir="${root_dir}/foundation"
+        backend_script="${root_dir}/scripts/prepare-foundation-backend.sh"
+        [ ! -f "${foundation_dir}/backend_override.tf" ] || {
+          printf 'Foundation backend is already configured. Use foundation:apply for later changes.\n' >&2
+          exit 2
+        }
+        terraform -chdir="${foundation_dir}" init -backend=false -input=false
+        local_dir="${root_dir}/../.local/terraform/foundation"
+        mkdir -p "${local_dir}"
+        plan_file="${local_dir}/bootstrap.tfplan"
+        terraform -chdir="${foundation_dir}" plan -input=false -out="${plan_file}" {{.CLI_ARGS}}
+        terraform -chdir="${foundation_dir}" apply -input=false "${plan_file}"
+        state_bucket="$(terraform -chdir="${foundation_dir}" output -raw terraform_state_bucket)"
+        TF_STATE_BUCKET="${state_bucket}" "${backend_script}" write
+        terraform -chdir="${foundation_dir}" init -input=false -force-copy \
+          -backend-config="${foundation_dir}/backend.hcl"
+        terraform -chdir="${foundation_dir}" state pull >/dev/null
+        printf 'Foundation state migrated to s3://%s/medikong/foundation/terraform.tfstate\n' "${state_bucket}"
+
+  foundation:init:
+    desc: Initialize the existing foundation S3 backend on this workstation.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        "${root_dir}/scripts/prepare-foundation-backend.sh" write
+        terraform -chdir="${root_dir}/foundation" init -input=false \
+          -backend-config="${root_dir}/foundation/backend.hcl" {{.CLI_ARGS}}
+
+  foundation:plan:
+    desc: Create a saved plan for the foundation state bucket and GitHub deployment identity.
+    deps:
+      - foundation:init
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        local_dir="${root_dir}/../.local/terraform/foundation"
+        mkdir -p "${local_dir}"
+        terraform -chdir="${root_dir}/foundation" plan -input=false \
+          -out="${local_dir}/plan.tfplan" {{.CLI_ARGS}}
+        printf 'Saved plan: %s\n' "${local_dir}/plan.tfplan"
+
+  foundation:apply:
+    desc: Plan and apply a foundation change. Requires CONFIRM=foundation.
+    cmds:
+      - |
+        set -eu
+        [ '{{default "" .CONFIRM}}' = 'foundation' ] || {
+          printf 'Set CONFIRM=foundation to change the Terraform state bucket or GitHub deployment role.\n' >&2
+          exit 2
+        }
+        root_dir="$(pwd)"
+        "${root_dir}/scripts/prepare-foundation-backend.sh" write
+        terraform -chdir="${root_dir}/foundation" init -input=false \
+          -backend-config="${root_dir}/foundation/backend.hcl"
+        local_dir="${root_dir}/../.local/terraform/foundation"
+        mkdir -p "${local_dir}"
+        plan_file="${local_dir}/plan.tfplan"
+        terraform -chdir="${root_dir}/foundation" plan -input=false \
+          -out="${plan_file}" {{.CLI_ARGS}}
+        terraform -chdir="${root_dir}/foundation" apply -input=false "${plan_file}"
+
+  foundation:output:
+    desc: Show foundation outputs such as the state bucket and GitHub deployment role ARN.
+    silent: true
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        "${root_dir}/scripts/prepare-foundation-backend.sh" write
+        terraform -chdir="${root_dir}/foundation" init -input=false \
+          -backend-config="${root_dir}/foundation/backend.hcl" >&2
+        terraform -chdir="${root_dir}/foundation" output {{.CLI_ARGS}}
+
+  init:
+    desc: Initialize one Terraform root. STACK is shared or environment; ENV defaults to dev.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        stack='{{.STACK}}'
+        env='{{.ENV}}'
+        case "${stack}" in
+          shared) terraform_dir="${root_dir}/shared" ;;
+          environment) terraform_dir="${root_dir}/environments/${env}" ;;
+          *) printf 'Unknown STACK=%s. Expected shared or environment.\n' "${stack}" >&2; exit 2 ;;
+        esac
+        [ -d "${terraform_dir}" ] || { printf 'Missing Terraform root: %s\n' "${terraform_dir}" >&2; exit 2; }
+        backend_config='{{default "" .BACKEND_CONFIG}}'
+        if [ -z "${backend_config}" ]; then
+          backend_config="${terraform_dir}/backend.hcl"
+        elif [ "${backend_config#/}" = "${backend_config}" ]; then
+          backend_config="${root_dir}/${backend_config}"
+        fi
+        [ -f "${backend_config}" ] || {
+          printf 'Missing backend config: %s\nCopy backend.hcl.example first or pass BACKEND_CONFIG=/absolute/path.\n' "${backend_config}" >&2
+          exit 2
+        }
+        terraform -chdir="${terraform_dir}" init -input=false -backend-config="${backend_config}" {{.CLI_ARGS}}
+
+  workspace:
+    desc: Select or create an environment workspace. WORKSPACE defaults to ENV.
+    cmds:
+      - |
+        set -eu
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        [ -d "${terraform_dir}" ] || { printf 'Missing Terraform root: %s\n' "${terraform_dir}" >&2; exit 2; }
+        [ "${workspace}" != 'default' ] || { printf 'Use an explicit environment workspace, not default.\n' >&2; exit 2; }
+        terraform -chdir="${terraform_dir}" workspace select "${workspace}" >/dev/null 2>&1 || \
+          terraform -chdir="${terraform_dir}" workspace new "${workspace}"
+        terraform -chdir="${terraform_dir}" workspace show
+
+  plan:
+    desc: Create a saved plan under .local/terraform unless PLAN_FILE is provided.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        stack='{{.STACK}}'
+        env='{{.ENV}}'
+        workspace='{{.WORKSPACE}}'
+        case "${stack}" in
+          shared)
+            terraform_dir="${root_dir}/shared"
+            scope='shared'
+            expected_workspace='default'
+            ;;
+          environment)
+            terraform_dir="${root_dir}/environments/${env}"
+            scope="${workspace}"
+            expected_workspace="${workspace}"
+            ;;
+          *) printf 'Unknown STACK=%s. Expected shared or environment.\n' "${stack}" >&2; exit 2 ;;
+        esac
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${expected_workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${expected_workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        local_dir="${root_dir}/../.local/terraform/${scope}"
+        mkdir -p "${local_dir}"
+        plan_file='{{default "" .PLAN_FILE}}'
+        [ -n "${plan_file}" ] || plan_file="${local_dir}/plan.tfplan"
+        var_file='{{default "" .VAR_FILE}}'
+        if [ -n "${var_file}" ]; then
+          terraform -chdir="${terraform_dir}" plan -input=false -var-file="${var_file}" -out="${plan_file}" {{.CLI_ARGS}}
+        else
+          terraform -chdir="${terraform_dir}" plan -input=false -out="${plan_file}" {{.CLI_ARGS}}
+        fi
+        printf 'Saved plan: %s\n' "${plan_file}"
+
+  apply:
+    desc: Apply a saved plan; shared and dev require a tagged GitHub Actions release.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        stack='{{.STACK}}'
+        env='{{.ENV}}'
+        workspace='{{.WORKSPACE}}'
+        case "${stack}" in
+          shared)
+            terraform_dir="${root_dir}/shared"
+            scope='shared'
+            expected_workspace='default'
+            ;;
+          environment)
+            terraform_dir="${root_dir}/environments/${env}"
+            scope="${workspace}"
+            expected_workspace="${workspace}"
+            ;;
+          *) printf 'Unknown STACK=%s. Expected shared or environment.\n' "${stack}" >&2; exit 2 ;;
+        esac
+        if [ "${stack}" = 'shared' ] || [ "${workspace}" = 'dev' ]; then
+          [ "${GITHUB_ACTIONS:-false}" = 'true' ] || {
+            printf 'Shared and dev plans can only be applied by the tagged GitHub Actions release.\n' >&2
+            exit 2
+          }
+          case "${GITHUB_REF_NAME:-}" in
+            infra-aws-dev-bootstrap-v* | infra-aws-dev-v*) ;;
+            *)
+              printf 'Invalid GitHub release tag for shared or dev apply: %s\n' "${GITHUB_REF_NAME:-unset}" >&2
+              exit 2
+              ;;
+          esac
+        fi
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${expected_workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${expected_workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        local_dir="${root_dir}/../.local/terraform/${scope}"
+        plan_file='{{default "" .PLAN_FILE}}'
+        [ -n "${plan_file}" ] || plan_file="${local_dir}/plan.tfplan"
+        [ -f "${plan_file}" ] || { printf 'Missing saved plan: %s\nRun the plan task first.\n' "${plan_file}" >&2; exit 2; }
+        terraform -chdir="${terraform_dir}" apply -input=false {{.CLI_ARGS}} "${plan_file}"
+        if [ "${stack}" = 'environment' ]; then
+          mkdir -p "${local_dir}"
+          umask 077
+          terraform -chdir="${terraform_dir}" output -raw ansible_inventory > "${local_dir}/inventory.ini"
+          printf 'Generated inventory: %s\n' "${local_dir}/inventory.ini"
+        fi
+
+  destroy:
+    desc: Destroy a sandbox environment stack. Shared and dev destruction is blocked.
+    cmds:
+      - |
+        set -eu
+        [ '{{.STACK}}' = 'environment' ] || { printf 'Shared resources cannot be destroyed through this task.\n' >&2; exit 2; }
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        [ "${workspace}" != 'dev' ] || {
+          printf 'The shared dev environment cannot be destroyed through this task.\n' >&2
+          exit 2
+        }
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        terraform -chdir="${terraform_dir}" destroy {{.CLI_ARGS}}
+
+  output:
+    desc: Show outputs for one Terraform root.
+    cmds:
+      - |
+        set -eu
+        workspace='{{.WORKSPACE}}'
+        case '{{.STACK}}' in
+          shared)
+            terraform_dir="$(pwd)/shared"
+            expected_workspace='default'
+            ;;
+          environment)
+            terraform_dir="$(pwd)/environments/{{.ENV}}"
+            expected_workspace="${workspace}"
+            ;;
+          *) printf 'Unknown STACK=%s. Expected shared or environment.\n' '{{.STACK}}' >&2; exit 2 ;;
+        esac
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${expected_workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${expected_workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        terraform -chdir="${terraform_dir}" output {{.CLI_ARGS}}
+
+  inventory:
+    desc: Write the selected environment's Ansible inventory under .local/terraform.
+    cmds:
+      - |
+        set -eu
+        root_dir="$(pwd)"
+        terraform_dir="${root_dir}/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        output_dir="${root_dir}/../.local/terraform/${workspace}"
+        mkdir -p "${output_dir}"
+        umask 077
+        terraform -chdir="${terraform_dir}" output -raw ansible_inventory > "${output_dir}/inventory.ini"
+        printf 'Generated inventory: %s\n' "${output_dir}/inventory.ini"
+
+  instances:start:
+    desc: Start all EC2 instances in the selected environment workspace.
+    cmds:
+      - |
+        set -eu
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        region="$(terraform -chdir="${terraform_dir}" output -raw aws_region)"
+        instance_ids="$(terraform -chdir="${terraform_dir}" output -raw managed_instance_ids)"
+        [ -n "${instance_ids}" ] || { printf 'No managed instance IDs found in Terraform state.\n' >&2; exit 2; }
+        aws ec2 start-instances --no-cli-pager --region "${region}" --instance-ids ${instance_ids} {{.CLI_ARGS}}
+
+  instances:stop:
+    desc: Stop all EC2 instances after the daily dev window; EBS root volumes remain allocated.
+    cmds:
+      - |
+        set -eu
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        region="$(terraform -chdir="${terraform_dir}" output -raw aws_region)"
+        instance_ids="$(terraform -chdir="${terraform_dir}" output -raw managed_instance_ids)"
+        [ -n "${instance_ids}" ] || { printf 'No managed instance IDs found in Terraform state.\n' >&2; exit 2; }
+        aws ec2 stop-instances --no-cli-pager --region "${region}" --instance-ids ${instance_ids} {{.CLI_ARGS}}
+
+  instances:status:
+    desc: Show state, type, and availability zone for all EC2 instances in the selected workspace.
+    cmds:
+      - |
+        set -eu
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        region="$(terraform -chdir="${terraform_dir}" output -raw aws_region)"
+        instance_ids="$(terraform -chdir="${terraform_dir}" output -raw managed_instance_ids)"
+        [ -n "${instance_ids}" ] || { printf 'No managed instance IDs found in Terraform state.\n' >&2; exit 2; }
+        aws ec2 describe-instances --no-cli-pager --region "${region}" --instance-ids ${instance_ids} \
+          --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,State:State.Name,Type:InstanceType,AZ:Placement.AvailabilityZone}' \
+          --output table {{.CLI_ARGS}}
+
+  kubernetes:tunnel:
+    desc: Forward local port 6443 to the private Kubernetes API through Systems Manager.
+    cmds:
+      - |
+        set -eu
+        terraform_dir="$(pwd)/environments/{{.ENV}}"
+        workspace='{{.WORKSPACE}}'
+        current_workspace="$(terraform -chdir="${terraform_dir}" workspace show)"
+        [ "${current_workspace}" = "${workspace}" ] || {
+          printf 'Workspace mismatch: expected %s, current %s.\n' "${workspace}" "${current_workspace}" >&2
+          exit 2
+        }
+        region="$(terraform -chdir="${terraform_dir}" output -raw aws_region)"
+        instance_id="$(terraform -chdir="${terraform_dir}" output -raw control_plane_instance_id)"
+        aws ssm start-session --region "${region}" --target "${instance_id}" \
+          --document-name AWS-StartPortForwardingSession \
+          --parameters 'portNumber=6443,localPortNumber=6443' {{.CLI_ARGS}}
+
+  diagram:
+    desc: Regenerate the AWS dev architecture PNG from its awsdac YAML source.
+    cmds:
+      - awsdac diagrams/aws-dev-architecture.yaml -o diagrams/aws-dev-architecture.png --force {{.CLI_ARGS}}

@@ -1,0 +1,87 @@
+---
+- name: Check primary control-plane state
+  ansible.builtin.stat:
+    path: "{{ kubernetes_admin_conf_path }}"
+  register: kubeadm_admin_conf
+
+- name: Pre-pull control-plane images
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "{{ kubeadm_image_pull_timeout }}"
+      - kubeadm
+      - config
+      - images
+      - pull
+      - "--cri-socket={{ kubernetes_cri_socket }}"
+  register: kubeadm_image_pull
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: kubeadm_image_pull.rc == 0
+  when: not kubeadm_admin_conf.stat.exists
+
+- name: Initialize primary control plane
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "{{ kubeadm_init_timeout }}"
+      - kubeadm
+      - init
+      - "--apiserver-advertise-address={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}"
+      - "--control-plane-endpoint={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}:6443"
+      - "--pod-network-cidr={{ kubernetes_pod_network_cidr }}"
+      - "--cri-socket={{ kubernetes_cri_socket }}"
+    creates: "{{ kubernetes_admin_conf_path }}"
+
+- name: Ensure operator kubeconfig directory exists
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Install operator kubeconfig
+  ansible.builtin.copy:
+    src: "{{ kubernetes_admin_conf_path }}"
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+    remote_src: true
+
+- name: Create cluster join command
+  ansible.builtin.command:
+    argv:
+      - kubeadm
+      - token
+      - create
+      - --print-join-command
+      - --ttl
+      - 2h
+  register: kubeadm_join_command
+  changed_when: false
+
+- name: Upload control-plane certificates
+  ansible.builtin.command:
+    argv:
+      - kubeadm
+      - init
+      - phase
+      - upload-certs
+      - --upload-certs
+  register: kubeadm_upload_certs
+  changed_when: false
+  when: groups['control_plane'] | length > 1
+
+- name: Record control-plane certificate key
+  ansible.builtin.set_fact:
+    kubeadm_certificate_key: "{{ kubeadm_upload_certs.stdout_lines | last }}"
+  when: groups['control_plane'] | length > 1
+
+- name: Validate control-plane certificate key
+  ansible.builtin.assert:
+    that: kubeadm_certificate_key is match('^[a-f0-9]{64}$')
+    fail_msg: kubeadm did not return a valid control-plane certificate key.
+  when: groups['control_plane'] | length > 1

@@ -1,0 +1,56 @@
+---
+- name: Install containerd on Debian-family hosts
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install containerd on Red Hat-family hosts
+  ansible.builtin.dnf:
+    name: containerd
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure containerd config directory exists
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Generate default containerd config
+  ansible.builtin.command: containerd config default
+  register: containerd_default_config
+  changed_when: false
+
+- name: Configure containerd systemd cgroups
+  ansible.builtin.copy:
+    dest: "{{ containerd_config_path }}"
+    mode: "0644"
+    content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}"
+  notify: Restart containerd
+
+- name: Ensure local registry trust directory exists
+  ansible.builtin.file:
+    path: "{{ containerd_registry_config_path }}/{{ local_registry_endpoint }}"
+    state: directory
+    mode: "0755"
+  when: local_registry_enabled | bool
+
+- name: Configure local registry endpoint for containerd
+  ansible.builtin.copy:
+    dest: "{{ containerd_registry_config_path }}/{{ local_registry_endpoint }}/hosts.toml"
+    mode: "0644"
+    content: |
+      server = "https://{{ local_registry_endpoint }}"
+
+      [host."https://{{ local_registry_endpoint }}"]
+        capabilities = ["pull", "resolve", "push"]
+        ca = "{{ containerd_registry_config_path }}/{{ local_registry_endpoint }}/ca.crt"
+  when: local_registry_enabled | bool
+  notify: Restart containerd
+
+- name: Enable containerd
+  ansible.builtin.service:
+    name: containerd
+    enabled: true
+    state: started

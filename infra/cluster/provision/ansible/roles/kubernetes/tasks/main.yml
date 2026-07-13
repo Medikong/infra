@@ -1,0 +1,38 @@
+---
+- name: Configure crictl for containerd
+  ansible.builtin.copy:
+    dest: "{{ crictl_config_path }}"
+    mode: "0644"
+    content: |
+      runtime-endpoint: {{ kubernetes_cri_socket }}
+      image-endpoint: {{ kubernetes_cri_socket }}
+      timeout: 10
+      debug: false
+
+- name: Install Kubernetes packages on Debian-family hosts
+  ansible.builtin.include_tasks: packages-debian.yml
+  when: ansible_os_family == "Debian"
+
+- name: Install Kubernetes packages on Red Hat-family hosts
+  ansible.builtin.include_tasks: packages-redhat.yml
+  when: ansible_os_family == "RedHat"
+
+- name: Configure kubelet private node address
+  ansible.builtin.copy:
+    dest: /etc/default/kubelet
+    mode: "0644"
+    content: |
+      KUBELET_EXTRA_ARGS=--node-ip={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}
+  notify: Restart kubelet
+
+- name: Enable kubelet
+  ansible.builtin.service:
+    name: kubelet
+    enabled: true
+
+- name: Write server bootstrap marker
+  ansible.builtin.copy:
+    dest: "{{ bootstrap_marker_path }}"
+    mode: "0644"
+    content: |
+      Kubernetes server initialization completed

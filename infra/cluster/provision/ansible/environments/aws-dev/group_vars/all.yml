@@ -1,0 +1,8 @@
+---
+kubernetes_release: v1.34
+kubernetes_pod_network_cidr: 192.168.0.0/16
+local_registry_enabled: false
+use_upstream_calico_images: true
+aws_ecr_enabled: true
+node_local_storage_size_gib: 20
+metrics_server_wait_timeout: 300s

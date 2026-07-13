@@ -1,0 +1,11 @@
+---
+- name: Check worker cluster state
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: worker_kubelet_config
+
+- name: Join worker to cluster
+  ansible.builtin.command: >-
+    {{ hostvars[groups['control_plane'][0]].kubeadm_join_command.stdout }}
+    --cri-socket={{ kubernetes_cri_socket }}
+  when: not worker_kubelet_config.stat.exists

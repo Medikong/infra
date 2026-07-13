@@ -6,13 +6,7 @@ Kong은 MediKong의 외부 API 진입점입니다.
 
 Kong Gateway와 Kong Ingress Controller는 Helm chart로 설치합니다.
 
-```bash
-cd infra/cluster
-make wsl-kong-bootstrap
-make wsl-kong-verify
-```
-
-로컬 Vagrant 클러스터에서는 MetalLB가 Kong proxy Service에 `10.10.10.240`을 할당합니다.
+현재 설치 선언은 GitOps 저장소가 소유합니다. 이 디렉터리는 이전 Kustomize 리소스를 보존합니다.
 
 ```text
 http://10.10.10.240
@@ -67,11 +61,4 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n kong get pods,svc
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get ingress -A
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get kongclusterplugins
 sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get kongconsumers -n medical-auth
-```
-
-Smoke test:
-
-```bash
-cd infra/cluster
-make wsl-local-k8s-crud-smoke
 ```

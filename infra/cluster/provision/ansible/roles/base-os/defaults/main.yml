@@ -1,0 +1,47 @@
+---
+base_os_packages_debian:
+  - apt-transport-https
+  - bash-completion
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - gpg
+  - jq
+  - rsync
+  - tar
+  - tmux
+  - unzip
+  - vim
+  - wget
+base_os_debug_packages_debian:
+  - dnsutils
+  - htop
+  - iproute2
+  - iputils-ping
+  - lsof
+  - net-tools
+  - netcat-openbsd
+  - tcpdump
+  - traceroute
+  - tree
+base_os_packages_redhat:
+  - bash-completion
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - jq
+  - rsync
+  - tar
+  - tmux
+  - unzip
+  - vim
+  - wget
+base_os_debug_packages_redhat:
+  - bind-utils
+  - net-tools
+  - netcat
+  - tcpdump
+  - traceroute
+  - tree

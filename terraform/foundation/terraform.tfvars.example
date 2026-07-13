@@ -1,0 +1,8 @@
+project_name = "medikong"
+aws_region   = "ap-northeast-2"
+
+github_repository = "TicketMong/infra"
+github_environment = "aws-dev"
+
+github_actions_role_name                = "medikong-github-infra-deployer"
+github_actions_role_max_session_seconds = 7200

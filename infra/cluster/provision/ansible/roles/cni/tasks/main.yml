@@ -1,0 +1,35 @@
+---
+- name: Download Calico manifest for private registry rewrite
+  ansible.builtin.get_url:
+    url: "{{ calico_manifest_url }}"
+    dest: "{{ calico_local_manifest_path }}"
+    mode: "0644"
+    force: true
+  when:
+    - local_registry_enabled | bool
+    - not (use_upstream_calico_images | bool)
+
+- name: Rewrite Calico images for private registry
+  ansible.builtin.replace:
+    path: "{{ calico_local_manifest_path }}"
+    regexp: "{{ item | regex_escape }}"
+    replace: "{{ local_registry_endpoint }}/{{ item }}"
+  loop: "{{ calico_images }}"
+  when:
+    - local_registry_enabled | bool
+    - not (use_upstream_calico_images | bool)
+
+- name: Install Calico CNI
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - apply
+      - -f
+      - "{{ calico_local_manifest_path if (local_registry_enabled | bool and not (use_upstream_calico_images | bool)) else calico_manifest_url }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: calico_apply
+  changed_when: "'created' in calico_apply.stdout or 'configured' in calico_apply.stdout"
+  retries: 12
+  delay: 5
+  until: calico_apply.rc == 0

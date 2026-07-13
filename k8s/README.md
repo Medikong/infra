@@ -1,6 +1,6 @@
 # Kubernetes Manifests
 
-이 디렉터리는 FastAPI 기반 MediKong 서비스를 로컬 Kubernetes에 배포하기 위한 manifest와 Kustomize overlay를 관리합니다.
+이 디렉터리는 MediKong 서비스의 이전 Kustomize manifest와 overlay를 관리합니다. 현재 aws-dev workload 배포의 source of truth는 GitOps 저장소입니다.
 
 ## 배포 구조
 
@@ -36,22 +36,7 @@ k8s/
 
 ## Local Overlay
 
-로컬 Vagrant Kubernetes에서는 다음 entrypoint를 사용합니다.
-
-| Overlay | 포함 리소스 | Make target |
-| --- | --- | --- |
-| `overlays/local/deps` | PV, PostgreSQL, Kafka | `make local-k8s-deps-apply` |
-| `overlays/local/apps` | auth/app Deployment/Service, Ingress | `make local-k8s-app-apply` |
-| `overlays/local/all` | namespace, deps, apps, Kong policy, NetworkPolicy 전체 | `make local-k8s-apply` |
-
-WSL에서 Vagrant CLI 대신 Ansible로 VM에 직접 적용할 때는 `wsl-*` 타깃을 사용합니다.
-
-```bash
-cd infra/cluster
-make wsl-local-k8s-bootstrap
-make IMAGE_TAG=dev-001 wsl-local-k8s-deploy
-make wsl-local-k8s-crud-smoke
-```
+`overlays/local`은 보존 중인 Kustomize 실험 구성입니다. 클러스터 생성이나 배포 Task와 연결되어 있지 않습니다.
 
 렌더링 확인:
 
@@ -69,22 +54,7 @@ kubectl kustomize k8s/overlays/local/all
 10.10.10.10:5000
 ```
 
-`make IMAGE_TAG=dev-001 local-k8s-deploy` 또는 `make IMAGE_TAG=dev-001 wsl-local-k8s-deploy`가 앱 이미지를 build/push하고 `k8s/overlays/local/apps` 및 `k8s/overlays/local/all`의 image tag를 갱신합니다.
-
-## 상태 확인
-
-```bash
-cd infra/cluster
-make local-k8s-status
-make local-k8s-crud-smoke
-```
-
-WSL 전용 흐름에서는 다음을 사용합니다.
-
-```bash
-make wsl-local-k8s-status
-make wsl-local-k8s-crud-smoke
-```
+image tag 변경과 적용은 GitOps 저장소에서 관리합니다.
 
 직접 확인:
 
@@ -99,7 +69,7 @@ sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get kongconsumers -A
 
 ## 로컬 전용과 AWS 전용
 
-현재 `overlays/local`은 Vagrant/kubeadm 로컬 환경용입니다.
+현재 `overlays/local`은 활성 프로비저닝 명령과 연결되지 않은 kubeadm 실험 자료입니다.
 
 ```text
 local registry

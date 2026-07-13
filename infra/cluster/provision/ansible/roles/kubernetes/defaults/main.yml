@@ -1,0 +1,13 @@
+---
+kubernetes_release: v1.34
+kubernetes_admin_conf_path: /etc/kubernetes/admin.conf
+kubernetes_cri_socket: unix:///run/containerd/containerd.sock
+kubernetes_pod_network_cidr: 192.168.0.0/16
+kubernetes_node_ready_timeout: 300s
+kubeadm_image_pull_timeout: 600s
+kubeadm_init_timeout: 600s
+crictl_config_path: /etc/crictl.yaml
+bootstrap_marker_path: /etc/cloudnative-cluster-ready
+metrics_server_version: v0.8.1
+metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/download/{{ metrics_server_version }}/components.yaml"
+metrics_server_wait_timeout: 300s

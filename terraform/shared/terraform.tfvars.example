@@ -1,0 +1,21 @@
+project_name = "medikong"
+aws_region   = "ap-northeast-2"
+
+# Add or remove service repositories here when the release surface changes.
+ecr_repositories = [
+  "auth-service",
+  "backoffice-service",
+  "coupon-service",
+  "concert-service",
+  "dashboard",
+  "frontend",
+  "notification-service",
+  "payment-service",
+  "read-api-loadtest",
+  "reservation-service",
+  "synthetic-traffic",
+  "ticket-service",
+  "user-service",
+]
+
+ecr_image_tag_mutability = "IMMUTABLE"
