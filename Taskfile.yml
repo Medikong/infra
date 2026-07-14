@@ -117,18 +117,18 @@ tasks:
     cmds:
       - task -d terraform inventory ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}'
 
-  terraform:instances:start:
-    desc: Proxy start of all EC2 instances in an environment workspace.
+  aws-dev:start:
+    desc: Start all AWS dev EC2 instances.
     cmds:
       - task -d terraform instances:start ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
-  terraform:instances:stop:
-    desc: Proxy stop of all EC2 instances after the daily dev window.
+  aws-dev:stop:
+    desc: Stop all AWS dev EC2 instances after the daily dev window.
     cmds:
       - task -d terraform instances:stop ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
-  terraform:instances:status:
-    desc: Proxy EC2 instance status inspection for an environment workspace.
+  aws-dev:status:
+    desc: Show the current state of all AWS dev EC2 instances.
     cmds:
       - task -d terraform instances:status ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 

@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   ENV: '{{default "dev" .ENV}}'
+  LOCAL_AWS_PROFILE: '{{default "dropmong-infra-admin" .AWS_PROFILE}}'
   STACK: '{{default "environment" .STACK}}'
   WORKSPACE: '{{default .ENV .WORKSPACE}}'
 
@@ -353,6 +354,8 @@ tasks:
 
   instances:start:
     desc: Start all EC2 instances in the selected environment workspace.
+    env:
+      AWS_PROFILE: '{{.LOCAL_AWS_PROFILE}}'
     cmds:
       - |
         set -eu
@@ -370,6 +373,8 @@ tasks:
 
   instances:stop:
     desc: Stop all EC2 instances after the daily dev window; EBS root volumes remain allocated.
+    env:
+      AWS_PROFILE: '{{.LOCAL_AWS_PROFILE}}'
     cmds:
       - |
         set -eu
@@ -387,6 +392,8 @@ tasks:
 
   instances:status:
     desc: Show state, type, and availability zone for all EC2 instances in the selected workspace.
+    env:
+      AWS_PROFILE: '{{.LOCAL_AWS_PROFILE}}'
     cmds:
       - |
         set -eu

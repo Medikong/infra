@@ -66,6 +66,7 @@ data "aws_iam_policy_document" "github_actions" {
   statement {
     sid = "AnsibleTransferBucketInfrastructure"
     actions = [
+      "s3:GetAccelerateConfiguration",
       "s3:CreateBucket",
       "s3:DeleteBucket",
       "s3:DeleteBucketPolicy",
