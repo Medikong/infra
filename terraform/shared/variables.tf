@@ -10,6 +10,17 @@ variable "aws_region" {
   default     = "ap-northeast-2"
 }
 
+variable "ansible_transfer_expiration_days" {
+  description = "Days before abandoned native SSM transfer objects are deleted."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ansible_transfer_expiration_days >= 1 && var.ansible_transfer_expiration_days <= 7
+    error_message = "ansible_transfer_expiration_days must be between 1 and 7."
+  }
+}
+
 variable "ecr_repositories" {
   description = "Service image repositories shared by all deployment environments."
   type        = set(string)

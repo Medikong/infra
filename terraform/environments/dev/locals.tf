@@ -1,6 +1,7 @@
 locals {
-  environment_name = terraform.workspace == "default" ? var.environment_name : terraform.workspace
-  name_prefix      = "${var.project_name}-${local.environment_name}"
+  environment_name             = terraform.workspace == "default" ? var.environment_name : terraform.workspace
+  name_prefix                  = "${var.project_name}-${local.environment_name}"
+  ansible_transfer_bucket_name = "${var.project_name}-ansible-transfer-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
 
   common_tags = {
     Project     = var.project_name
@@ -82,6 +83,4 @@ locals {
       node_taints       = "medikong.io/workload=observability:NoSchedule"
     }
   }
-
-  operator_public_key = var.public_key_path == null ? null : file(pathexpand(var.public_key_path))
 }

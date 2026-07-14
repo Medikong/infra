@@ -1,6 +1,9 @@
 project_name = "medikong"
 aws_region   = "ap-northeast-2"
 
+# Native amazon.aws.aws_ssm transfer objects are removed quickly and are never versioned.
+ansible_transfer_expiration_days = 1
+
 # Add or remove service repositories here when the release surface changes.
 ecr_repositories = [
   "auth-service",

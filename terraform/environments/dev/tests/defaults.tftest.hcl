@@ -28,10 +28,6 @@ mock_provider "aws" {
 run "dev_defaults" {
   command = plan
 
-  variables {
-    public_key_path = null
-  }
-
   assert {
     condition     = length(aws_subnet.public) == 3
     error_message = "The dev VPC must use three public subnets."
@@ -124,7 +120,6 @@ run "reject_over_budget_runtime" {
   command = plan
 
   variables {
-    public_key_path     = null
     daily_runtime_hours = 24
   }
 
@@ -135,8 +130,7 @@ run "reject_retention_shorter_than_runtime" {
   command = plan
 
   variables {
-    public_key_path = null
-    retention_days  = 9
+    retention_days = 9
   }
 
   expect_failures = [terraform_data.budget_guard]
@@ -146,7 +140,6 @@ run "reject_unpriced_graviton_type" {
   command = plan
 
   variables {
-    public_key_path           = null
     app_worker_instance_types = ["c7g.large", "t4g.medium"]
   }
 
@@ -156,16 +149,17 @@ run "reject_unpriced_graviton_type" {
 run "ssm_access_contract" {
   command = apply
 
-  variables {
-    public_key_path = null
-  }
-
   assert {
     condition = (
-      strcontains(output.ansible_inventory, "AWS-StartSSHSession")
-      && !strcontains(output.ansible_inventory, "ProxyJump")
+      strcontains(output.ansible_inventory, "ansible_connection=amazon.aws.aws_ssm")
+      && strcontains(output.ansible_inventory, "ansible_aws_ssm_instance_id=")
+      && strcontains(output.ansible_inventory, "ansible_aws_ssm_bucket_name=medikong-ansible-transfer-123456789012-ap-northeast-2")
+      && strcontains(output.ansible_inventory, "ansible_become_user=root")
+      && !strcontains(output.ansible_inventory, "AWS-StartSSHSession")
+      && !strcontains(output.ansible_inventory, "ansible_ssh_private_key_file")
+      && !strcontains(output.ansible_inventory, "ansible_user=")
       && strcontains(output.control_plane_ssm_tunnel_command, "AWS-StartPortForwardingSession")
     )
-    error_message = "Node administration must use Systems Manager without a bastion ProxyJump."
+    error_message = "Node administration must use the native amazon.aws.aws_ssm connection with its dedicated transfer bucket and explicit root become."
   }
 }

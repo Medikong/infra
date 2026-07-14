@@ -20,6 +20,11 @@ tasks:
     cmds:
       - task --list
 
+  requirements:install:
+    desc: Install the pinned Ansible collections required by aws-dev.
+    cmds:
+      - ansible-galaxy collection install -r ../../requirements.yml
+
   inventory:generate:
     desc: Generate the aws-dev inventory from the selected Terraform workspace.
     cmds:
@@ -35,10 +40,16 @@ tasks:
           printf 'Missing Terraform inventory: %s\nRun: task terraform:inventory ENV=dev WORKSPACE=%s\n' "${inventory}" '{{.WORKSPACE}}' >&2
           exit 2
         }
-        grep -q '^\[control_plane\]' "${inventory}"
-        grep -q '^\[workers\]' "${inventory}"
-        grep -q 'AWS-StartSSHSession' "${inventory}"
-        grep -q 'ansible_user=ubuntu' "${inventory}"
+        rg -q '^\[control_plane\]' "${inventory}"
+        rg -q '^\[workers\]' "${inventory}"
+        rg -q 'ansible_connection=amazon\.aws\.aws_ssm' "${inventory}"
+        rg -q 'ansible_aws_ssm_instance_id=i-' "${inventory}"
+        rg -q 'ansible_aws_ssm_bucket_name=' "${inventory}"
+        rg -q 'ansible_become_user=root' "${inventory}"
+        if rg -q 'AWS-StartSSHSession|ansible_ssh_private_key_file|ansible_user=' "${inventory}"; then
+          printf 'Terraform inventory still contains an SSH transport setting: %s\n' "${inventory}" >&2
+          exit 2
+        fi
 
   ansible:ping:
     desc: Verify aws-dev SSM-backed Ansible connectivity.
@@ -47,6 +58,9 @@ tasks:
     cmds:
       - |
         set -eu
+        if [ -z "${AWS_PROFILE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != 'true' ]; then
+          export AWS_PROFILE=dropmong-infra-admin
+        fi
         attempt=1
         while ! ansible {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' all -m ping; do
           if [ "${attempt}" -ge '{{.CONNECT_RETRIES}}' ]; then
@@ -122,4 +136,9 @@ tasks:
       vars:
         - PLAYBOOK
     cmds:
-      - ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' 'playbooks/{{.PLAYBOOK}}' {{.CLI_ARGS}}
+      - |
+        set -eu
+        if [ -z "${AWS_PROFILE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != 'true' ]; then
+          export AWS_PROFILE=dropmong-infra-admin
+        fi
+        ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' 'playbooks/{{.PLAYBOOK}}' {{.CLI_ARGS}}

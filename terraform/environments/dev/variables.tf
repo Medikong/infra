@@ -57,19 +57,6 @@ variable "public_subnet_cidrs" {
   }
 }
 
-variable "public_key_path" {
-  description = "Local public key registered on Kubernetes nodes for SSH over an SSM session."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "private_key_path" {
-  description = "Local private key path written to the generated Ansible inventory."
-  type        = string
-  default     = "~/.ssh/k8s-key"
-}
-
 variable "ubuntu_arm64_ami_ssm_parameter" {
   description = "Canonical SSM public parameter for the current Ubuntu 24.04 ARM64 AMI."
   type        = string

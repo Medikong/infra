@@ -75,7 +75,7 @@ output "estimated_ten_day_cost" {
 }
 
 output "control_plane_private_endpoint" {
-  description = "Private Kubernetes API endpoint reached through an SSH tunnel or from inside the VPC."
+  description = "Private Kubernetes API endpoint reached through SSM port forwarding or from inside the VPC."
   value       = "https://${aws_instance.kubernetes["control-plane-1"].private_ip}:6443"
 }
 
@@ -92,8 +92,8 @@ output "control_plane_ssm_tunnel_command" {
 output "ansible_inventory" {
   description = "Generated inventory content. Use the Terraform Taskfile to write it under .local/."
   value = templatefile("${path.module}/templates/inventory.ini.tftpl", {
-    aws_region       = var.aws_region
-    private_key_path = var.private_key_path
+    aws_region                   = var.aws_region
+    ansible_transfer_bucket_name = local.ansible_transfer_bucket_name
     nodes = {
       for name, instance in aws_instance.kubernetes : name => {
         instance_id = instance.id

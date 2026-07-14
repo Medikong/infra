@@ -68,7 +68,6 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_DEV_SSH_PUBLIC_KEY: ${{ vars.AWS_DEV_SSH_PUBLIC_KEY }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
@@ -94,7 +93,6 @@ jobs:
           set -euo pipefail
           : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN repository variable.}"
           : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable.}"
-          : "${AWS_DEV_SSH_PUBLIC_KEY:?Set the AWS_DEV_SSH_PUBLIC_KEY repository variable.}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@acca2b1b2070338fb9fd1ca27ecee81d687e58e5 # v6.1.2
@@ -121,8 +119,7 @@ jobs:
           set -euo pipefail
           task -d terraform init STACK=environment ENV=dev BACKEND_CONFIG=environments/dev/backend.hcl
           task -d terraform workspace ENV=dev WORKSPACE="${WORKSPACE}"
-          task -d terraform plan STACK=environment ENV=dev WORKSPACE="${WORKSPACE}" \
-            VAR_FILE="${GITHUB_WORKSPACE}/.local/ci/aws-dev.tfvars"
+          task -d terraform plan STACK=environment ENV=dev WORKSPACE="${WORKSPACE}"
 
       - name: Upload saved plans
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -147,8 +144,6 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_DEV_SSH_PRIVATE_KEY: ${{ secrets.AWS_DEV_SSH_PRIVATE_KEY }}
-      AWS_DEV_SSH_PUBLIC_KEY: ${{ vars.AWS_DEV_SSH_PUBLIC_KEY }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
@@ -173,25 +168,27 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Ansible and Session Manager plugin
+      - name: Install Ansible SSM dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check "ansible-core==2.20.5"
+          python -m pip install --disable-pip-version-check \
+            "ansible-core==2.20.5" \
+            "boto3>=1.35.0,<2.0.0"
+          ansible-galaxy collection install \
+            -r infra/cluster/provision/ansible/requirements.yml
           curl --fail --location --silent --show-error \
             "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" \
             --output /tmp/session-manager-plugin.deb
           sudo dpkg -i /tmp/session-manager-plugin.deb
           session-manager-plugin >/dev/null
 
-      - name: Validate deployment variables and secret
+      - name: Validate deployment variables
         shell: bash
         run: |
           set -euo pipefail
           : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN repository variable.}"
           : "${TF_STATE_BUCKET:?Set the TF_STATE_BUCKET repository variable.}"
-          : "${AWS_DEV_SSH_PUBLIC_KEY:?Set the AWS_DEV_SSH_PUBLIC_KEY repository variable.}"
-          : "${AWS_DEV_SSH_PRIVATE_KEY:?Set AWS_DEV_SSH_PRIVATE_KEY in the aws-dev environment.}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@acca2b1b2070338fb9fd1ca27ecee81d687e58e5 # v6.1.2

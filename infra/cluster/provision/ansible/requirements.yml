@@ -1,3 +1,5 @@
 ---
 roles: []
-collections: []
+collections:
+  - name: amazon.aws
+    version: "11.3.0"

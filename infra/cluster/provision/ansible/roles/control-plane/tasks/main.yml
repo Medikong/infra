@@ -36,18 +36,18 @@
 
 - name: Ensure operator kubeconfig directory exists
   ansible.builtin.file:
-    path: "/home/{{ ansible_user }}/.kube"
+    path: "{{ kubernetes_admin_home }}/.kube"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ kubernetes_admin_user }}"
+    group: "{{ kubernetes_admin_group }}"
     mode: "0755"
 
 - name: Install operator kubeconfig
   ansible.builtin.copy:
     src: "{{ kubernetes_admin_conf_path }}"
-    dest: "/home/{{ ansible_user }}/.kube/config"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    dest: "{{ kubernetes_admin_home }}/.kube/config"
+    owner: "{{ kubernetes_admin_user }}"
+    group: "{{ kubernetes_admin_group }}"
     mode: "0600"
     remote_src: true
 

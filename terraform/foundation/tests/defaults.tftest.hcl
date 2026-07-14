@@ -58,4 +58,9 @@ run "foundation_defaults" {
     ]
     error_message = "The GitHub deployment role must trust only infrastructure tags and the aws-dev environment."
   }
+
+  assert {
+    condition     = local.ansible_transfer_bucket == "medikong-ansible-transfer-123456789012-ap-northeast-2"
+    error_message = "The GitHub deployment role and shared stack must use the same account- and region-specific Ansible transfer bucket name."
+  }
 }

@@ -64,6 +64,20 @@ tasks:
           TF_DATA_DIR="${data_dir}" terraform -chdir="${environment_dir}" test
         done
 
+  aws-dev:plan:
+    desc: Preview shared and AWS dev Terraform changes locally without applying them.
+    cmds:
+      - bash scripts/plan-aws-dev.sh {{.CLI_ARGS}}
+
+  aws-dev:deploy:tag:
+    desc: Create and push an AWS dev release tag. MODE is release or bootstrap; set DRY_RUN=true to preview.
+    cmds:
+      - bash scripts/deploy-aws-dev-tag.sh
+    env:
+      MODE: '{{default "release" .MODE}}'
+      BUMP: '{{default "patch" .BUMP}}'
+      DRY_RUN: '{{default "false" .DRY_RUN}}'
+
   foundation:bootstrap:
     desc: Create the state bucket, GitHub OIDC provider, and deployment role, then migrate foundation state to S3.
     cmds:

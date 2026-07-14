@@ -7,10 +7,6 @@ vpc_cidr             = "10.20.0.0/16"
 availability_zones    = ["ap-northeast-2a", "ap-northeast-2b", "ap-northeast-2c"]
 public_subnet_cidrs   = ["10.20.10.0/24", "10.20.20.0/24", "10.20.30.0/24"]
 
-# Set both paths to enable SSH tunneled through AWS Systems Manager.
-public_key_path  = "~/.ssh/k8s-key.pub"
-private_key_path = "~/.ssh/k8s-key"
-
 control_plane_instance_type        = "t4g.medium"
 platform_worker_instance_type      = "t4g.large"
 app_worker_instance_types          = ["t4g.medium", "t4g.medium"]

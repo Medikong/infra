@@ -1,14 +1,3 @@
-resource "aws_key_pair" "operator" {
-  count = local.operator_public_key == null ? 0 : 1
-
-  key_name   = "${local.name_prefix}-operator"
-  public_key = local.operator_public_key
-
-  tags = {
-    Name = "${local.name_prefix}-operator"
-  }
-}
-
 resource "aws_instance" "kubernetes" {
   for_each = local.kubernetes_nodes
 
@@ -17,7 +6,6 @@ resource "aws_instance" "kubernetes" {
   availability_zone           = each.value.availability_zone
   subnet_id                   = aws_subnet.public[each.value.availability_zone].id
   associate_public_ip_address = true
-  key_name                    = try(aws_key_pair.operator[0].key_name, null)
   vpc_security_group_ids      = [aws_security_group.kubernetes_nodes.id]
   iam_instance_profile        = aws_iam_instance_profile.kubernetes_node.name
 

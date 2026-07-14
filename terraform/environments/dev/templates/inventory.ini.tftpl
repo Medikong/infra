@@ -1,14 +1,14 @@
 [control_plane]
 %{ for name, node in nodes ~}
 %{ if node.role == "control-plane" ~}
-${name} ansible_host=${node.instance_id} node_ip=${node.private_ip} ansible_user=ubuntu node_labels='${node.node_labels}' node_taints='${node.node_taints}'
+${name} ansible_host=${node.instance_id} ansible_aws_ssm_instance_id=${node.instance_id} node_ip=${node.private_ip} node_labels='${node.node_labels}' node_taints='${node.node_taints}'
 %{ endif ~}
 %{ endfor ~}
 
 [workers]
 %{ for name, node in nodes ~}
 %{ if node.role == "worker" ~}
-${name} ansible_host=${node.instance_id} node_ip=${node.private_ip} ansible_user=ubuntu node_labels='${node.node_labels}' node_taints='${node.node_taints}'
+${name} ansible_host=${node.instance_id} ansible_aws_ssm_instance_id=${node.instance_id} node_ip=${node.private_ip} node_labels='${node.node_labels}' node_taints='${node.node_taints}'
 %{ endif ~}
 %{ endfor ~}
 
@@ -51,6 +51,12 @@ control_plane
 workers
 
 [k8s_cluster:vars]
+ansible_connection=amazon.aws.aws_ssm
+ansible_aws_ssm_region=${aws_region}
+ansible_aws_ssm_bucket_name=${ansible_transfer_bucket_name}
+ansible_aws_ssm_bucket_sse_mode=AES256
+ansible_aws_ssm_s3_addressing_style=virtual
 ansible_python_interpreter=/usr/bin/python3
-ansible_ssh_private_key_file=${private_key_path}
-ansible_ssh_common_args='-o ProxyCommand="aws ssm start-session --region ${aws_region} --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p" -o StrictHostKeyChecking=accept-new'
+ansible_become=true
+ansible_become_method=sudo
+ansible_become_user=root

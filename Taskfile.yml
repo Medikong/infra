@@ -31,6 +31,16 @@ tasks:
     cmds:
       - task -d infra/cluster/provision/ansible/environments/private-dev private-dev:bootstrap {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
+  aws-dev:plan:
+    desc: Preview shared and AWS dev Terraform changes locally without applying them.
+    cmds:
+      - task -d terraform aws-dev:plan {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
+  aws-dev:deploy:tag:
+    desc: Create and push an AWS dev release tag that triggers the GitHub Actions deployment.
+    cmds:
+      - task -d terraform aws-dev:deploy:tag MODE='{{default "release" .MODE}}' BUMP='{{default "patch" .BUMP}}' DRY_RUN='{{default "false" .DRY_RUN}}'
+
   terraform:fmt:
     desc: Proxy Terraform formatting to terraform/Taskfile.yml.
     cmds:

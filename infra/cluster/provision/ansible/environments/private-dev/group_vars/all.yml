@@ -1,6 +1,9 @@
 kubernetes_release: "{{ lookup('env', 'KUBERNETES_RELEASE') | default('v1.34', true) }}"
 use_upstream_calico_images: "{{ not local_registry_enabled }}"
 kubernetes_admin_conf_path: /etc/kubernetes/admin.conf
+kubernetes_admin_user: lab-bum4496-833cff
+kubernetes_admin_group: lab-bum4496-833cff
+kubernetes_admin_home: /home/lab-bum4496-833cff
 kubernetes_cri_socket: unix:///run/containerd/containerd.sock
 kubernetes_pod_network_cidr: "{{ lookup('env', 'KUBERNETES_POD_NETWORK_CIDR') | default('192.168.0.0/16', true) }}"
 kubernetes_node_ready_timeout: "{{ lookup('env', 'KUBERNETES_NODE_READY_TIMEOUT') | default('300s', true) }}"
