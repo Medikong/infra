@@ -153,6 +153,7 @@ run "ssm_access_contract" {
     condition = (
       strcontains(output.ansible_inventory, "ansible_connection=amazon.aws.aws_ssm")
       && strcontains(output.ansible_inventory, "ansible_aws_ssm_instance_id=")
+      && strcontains(output.ansible_inventory, "ansible_aws_ssm_timeout=900")
       && strcontains(output.ansible_inventory, "ansible_aws_ssm_bucket_name=medikong-ansible-transfer-123456789012-ap-northeast-2")
       && strcontains(output.ansible_inventory, "ansible_become_user=root")
       && !strcontains(output.ansible_inventory, "AWS-StartSSHSession")

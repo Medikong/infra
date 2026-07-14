@@ -285,7 +285,7 @@ tasks:
         terraform -chdir="${terraform_dir}" apply -input=false {{.CLI_ARGS}} "${plan_file}"
         if [ "${stack}" = 'environment' ]; then
           mkdir -p "${local_dir}"
-          umask 077
+          install -m 600 /dev/null "${local_dir}/inventory.ini"
           terraform -chdir="${terraform_dir}" output -raw ansible_inventory > "${local_dir}/inventory.ini"
           printf 'Generated inventory: %s\n' "${local_dir}/inventory.ini"
         fi
@@ -348,7 +348,7 @@ tasks:
         }
         output_dir="${root_dir}/../.local/terraform/${workspace}"
         mkdir -p "${output_dir}"
-        umask 077
+        install -m 600 /dev/null "${output_dir}/inventory.ini"
         terraform -chdir="${terraform_dir}" output -raw ansible_inventory > "${output_dir}/inventory.ini"
         printf 'Generated inventory: %s\n' "${output_dir}/inventory.ini"
 

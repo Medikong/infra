@@ -2,6 +2,8 @@ version: "3"
 
 env:
   ANSIBLE_CONFIG: ../../ansible.cfg
+  OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
+  PATH: '{{.ROOT_DIR}}/.local/ansible-venv/bin:{{.HOME}}/.local/bin:{{.PATH}}'
 
 vars:
   ROOT_DIR: '{{.TASKFILE_DIR}}/../../../../../..'
@@ -81,22 +83,34 @@ tasks:
   aws-dev:kubernetes:
     desc: Install the aws-dev kubeadm cluster.
     cmds:
-      - task playbook PLAYBOOK=kubernetes.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: kubernetes.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:node-labels:
     desc: Apply Terraform-provided aws-dev node labels and taints.
     cmds:
-      - task playbook PLAYBOOK=node-labels.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: node-labels.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:helm:
     desc: Install Helm on aws-dev.
     cmds:
-      - task playbook PLAYBOOK=helm.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: helm.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:verify:
     desc: Verify aws-dev Kubernetes readiness.
     cmds:
-      - task playbook PLAYBOOK=verify.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: verify.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:bootstrap:
     internal: true
@@ -105,7 +119,11 @@ tasks:
       - task -d '{{.ROOT_DIR}}/terraform' init STACK=shared BACKEND_CONFIG='{{.SHARED_BACKEND_CONFIG}}'
       - task -d '{{.ROOT_DIR}}/terraform' plan STACK=shared
       - task -d '{{.ROOT_DIR}}/terraform' apply STACK=shared
-      - task aws-dev:apply WORKSPACE='{{.WORKSPACE}}' ENVIRONMENT_BACKEND_CONFIG='{{.ENVIRONMENT_BACKEND_CONFIG}}' VAR_FILE='{{.VAR_FILE}}'
+      - task: aws-dev:apply
+        vars:
+          WORKSPACE: '{{.WORKSPACE}}'
+          ENVIRONMENT_BACKEND_CONFIG: '{{.ENVIRONMENT_BACKEND_CONFIG}}'
+          VAR_FILE: '{{.VAR_FILE}}'
 
   aws-dev:apply:
     internal: true
@@ -115,20 +133,23 @@ tasks:
       - task -d '{{.ROOT_DIR}}/terraform' workspace ENV=dev WORKSPACE='{{.WORKSPACE}}'
       - task -d '{{.ROOT_DIR}}/terraform' plan STACK=environment ENV=dev WORKSPACE='{{.WORKSPACE}}' VAR_FILE='{{.VAR_FILE}}'
       - task -d '{{.ROOT_DIR}}/terraform' apply STACK=environment ENV=dev WORKSPACE='{{.WORKSPACE}}'
-      - task ansible:bootstrap
+      - task: ansible:bootstrap
 
   aws-dev:configure:
     desc: Configure Kubernetes after applying a saved Terraform plan.
     cmds:
-      - task ansible:bootstrap
+      - task: ansible:bootstrap
 
   ansible:bootstrap:
     internal: true
     cmds:
-      - task inventory:check
-      - task syntax
-      - task ansible:ping
-      - task playbook PLAYBOOK=site.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: inventory:check
+      - task: syntax
+      - task: ansible:ping
+      - task: playbook
+        vars:
+          PLAYBOOK: site.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   playbook:
     internal: true

@@ -16,8 +16,11 @@
     - base-os
     - containerd
     - kubernetes
-    - role: cni
-      tasks_from: prepare
+  tasks:
+    - name: Prepare CNI images on every Kubernetes host
+      ansible.builtin.include_role:
+        name: cni
+        tasks_from: prepare
 
 - name: Initialize aws-dev primary control plane
   hosts: "control_plane[0]"
@@ -36,9 +39,11 @@
   gather_facts: true
   vars_files:
     - ../group_vars/all.yml
-  roles:
-    - role: control-plane
-      tasks_from: join
+  tasks:
+    - name: Join additional control plane
+      ansible.builtin.include_role:
+        name: control-plane
+        tasks_from: join
 
 - name: Join aws-dev workers
   hosts: workers
@@ -55,8 +60,12 @@
   gather_facts: false
   vars_files:
     - ../group_vars/all.yml
-  roles:
-    - role: cni
-      tasks_from: ready
-    - role: kubernetes
-      tasks_from: metrics
+  tasks:
+    - name: Wait for CNI readiness
+      ansible.builtin.include_role:
+        name: cni
+        tasks_from: ready
+    - name: Install Kubernetes metrics services
+      ansible.builtin.include_role:
+        name: kubernetes
+        tasks_from: metrics

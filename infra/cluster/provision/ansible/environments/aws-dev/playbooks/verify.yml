@@ -5,6 +5,8 @@
   gather_facts: false
   vars_files:
     - ../group_vars/all.yml
-  roles:
-    - role: kubernetes
-      tasks_from: verify
+  tasks:
+    - name: Verify Kubernetes cluster readiness
+      ansible.builtin.include_role:
+        name: kubernetes
+        tasks_from: verify

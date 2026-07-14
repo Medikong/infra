@@ -1,6 +1,11 @@
 ---
 kubernetes_release: v1.34
+kubernetes_admin_conf_path: /etc/kubernetes/admin.conf
+kubernetes_cri_socket: unix:///run/containerd/containerd.sock
 kubernetes_pod_network_cidr: 192.168.0.0/16
+kubernetes_node_ready_timeout: 300s
+kubeadm_image_pull_timeout: 600s
+kubeadm_init_timeout: 600s
 local_registry_enabled: false
 use_upstream_calico_images: true
 aws_ecr_enabled: true
