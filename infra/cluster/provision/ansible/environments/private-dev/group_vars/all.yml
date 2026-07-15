@@ -80,7 +80,7 @@ server_debug_packages:
 
 private_dev_argocd_namespace: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_NAMESPACE') | default('argocd', true) }}"
 private_dev_argocd_install_manifest_url: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_INSTALL_MANIFEST_URL') | default('https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml', true) }}"
-private_dev_argocd_root_application_url: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL') | default('https://raw.githubusercontent.com/TicketMong/gitops/main/argo/applications/private-dev/root.yaml', true) }}"
+private_dev_argocd_root_application_url: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_URL') | default('https://raw.githubusercontent.com/Medikong/gitops/main/argo/applications/private-dev/root.yaml', true) }}"
 private_dev_argocd_server_ready_timeout: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_SERVER_READY_TIMEOUT') | default('300s', true) }}"
 private_dev_argocd_controller_ready_timeout: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_CONTROLLER_READY_TIMEOUT') | default('300s', true) }}"
 private_dev_argocd_root_application_name: "{{ lookup('env', 'PRIVATE_DEV_ARGOCD_ROOT_APPLICATION_NAME') | default('medikong-private-dev-apps', true) }}"
