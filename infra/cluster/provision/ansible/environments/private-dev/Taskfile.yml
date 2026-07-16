@@ -54,7 +54,6 @@ tasks:
         key='{{.PRIVATE_DEV_SSH_KEY}}'
         if [ "${key#\~/}" != "${key}" ]; then key="${HOME}/${key#\~/}"; fi
         mkdir -p "$(dirname "${config}")"
-        umask 077
         {
           printf 'Host private-dev-node1 node1\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ForwardAgent yes\n  StrictHostKeyChecking accept-new\n\n' '{{.PRIVATE_DEV_NODE1_HOST}}' '{{.PRIVATE_DEV_NODE1_PORT}}' '{{.PRIVATE_DEV_SSH_USER}}' "${key}"
           for node in 2 3 4 5 6; do
@@ -62,6 +61,7 @@ tasks:
             printf 'Host node%s\n  HostName %s\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ProxyJump private-dev-node1\n  StrictHostKeyChecking accept-new\n\n' "${node}" "${host}" '{{.PRIVATE_DEV_SSH_USER}}' "${key}"
           done
         } > "${config}"
+        chmod 600 "${config}"
 
   private-dev:ssh-setup-all:
     desc: Install the local public key on all private-dev nodes through node1.
