@@ -10,7 +10,7 @@ run "shared_defaults" {
   command = plan
 
   assert {
-    condition     = length(aws_ecr_repository.service) == 13
+    condition     = length(aws_ecr_repository.service) == 17
     error_message = "The shared stack must create one ECR repository for each configured service."
   }
 

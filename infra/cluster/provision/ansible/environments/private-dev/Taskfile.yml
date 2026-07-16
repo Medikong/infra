@@ -102,30 +102,54 @@ tasks:
   private-dev:kubernetes:
     desc: Install and verify the private-dev kubeadm cluster.
     cmds:
-      - task playbook PLAYBOOK=kubernetes.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
-      - task playbook PLAYBOOK=node-labels.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
-      - task playbook PLAYBOOK=helm.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
-      - task playbook PLAYBOOK=verify.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: kubernetes.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+      - task: playbook
+        vars:
+          PLAYBOOK: node-labels.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+      - task: playbook
+        vars:
+          PLAYBOOK: helm.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+      - task: playbook
+        vars:
+          PLAYBOOK: verify.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:argocd:
     desc: Install Argo CD and the private-dev root Application.
     cmds:
-      - task playbook PLAYBOOK=argocd.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: argocd.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:longhorn:
     desc: Prepare private-dev Longhorn host prerequisites.
     cmds:
-      - task playbook PLAYBOOK=longhorn.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: longhorn.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:registry:
     desc: Configure the private-dev registry.
     cmds:
-      - task playbook PLAYBOOK=registry.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: registry.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:secrets:
     desc: Create private-dev Kubernetes Secrets from operator environment variables.
     cmds:
-      - task playbook PLAYBOOK=secrets.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: secrets.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:bootstrap:
     desc: Validate, connect, and run the complete private-dev site playbook.
@@ -133,7 +157,10 @@ tasks:
       - task inventory:check
       - task syntax
       - task ansible:ping
-      - task playbook PLAYBOOK=site.yml {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+      - task: playbook
+        vars:
+          PLAYBOOK: site.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   playbook:
     internal: true

@@ -38,6 +38,10 @@ variable "ecr_repositories" {
     "synthetic-traffic",
     "ticket-service",
     "user-service",
+    "catalog-service",
+    "dropmong-web",
+    "interest-service",
+    "order-service",
   ]
 }
 
