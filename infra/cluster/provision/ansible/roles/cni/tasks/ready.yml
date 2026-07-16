@@ -31,6 +31,54 @@
     KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
   changed_when: false
 
+- name: Switch Calico IP pool to VXLAN encapsulation
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - patch
+      - ippool
+      - default-ipv4-ippool
+      - --type=merge
+      - -p
+      - '{"spec":{"ipipMode":"Never","vxlanMode":"Always"}}'
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: calico_encapsulation_patch
+  changed_when: "'patched' in calico_encapsulation_patch.stdout and 'no change' not in calico_encapsulation_patch.stdout"
+  when: calico_encapsulation == 'vxlan'
+
+- name: Restart Calico node agents to apply VXLAN encapsulation
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - rollout
+      - restart
+      - daemonset/calico-node
+      - -n
+      - kube-system
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  when:
+    - calico_encapsulation == 'vxlan'
+    - calico_encapsulation_patch.changed
+
+- name: Wait for Calico node agents after encapsulation change
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - rollout
+      - status
+      - daemonset/calico-node
+      - -n
+      - kube-system
+      - "--timeout={{ calico_node_ready_timeout }}"
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  changed_when: false
+  when:
+    - calico_encapsulation == 'vxlan'
+    - calico_encapsulation_patch.changed
+
 - name: Wait for Kubernetes nodes to become Ready
   ansible.builtin.command:
     argv:

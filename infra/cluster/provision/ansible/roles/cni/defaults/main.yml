@@ -9,3 +9,4 @@ calico_images:
   - "quay.io/calico/node:{{ calico_version }}"
   - "quay.io/calico/kube-controllers:{{ calico_version }}"
 use_upstream_calico_images: true
+calico_encapsulation: ipip
