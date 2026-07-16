@@ -1,0 +1,74 @@
+---
+- name: Refresh private-dev ecr-registry image pull secret
+  hosts: control_plane
+  become: false
+  gather_facts: false
+
+  vars:
+    ecr_registry_host: 205623789422.dkr.ecr.ap-northeast-2.amazonaws.com
+    ecr_registry_region: ap-northeast-2
+    ecr_registry_aws_profile: "{{ lookup('env', 'AWS_PROFILE') | default('dropmong-infra-admin', true) }}"
+    ecr_registry_namespaces:
+      - dropmong-auth
+      - dropmong-catalog
+      - dropmong-coupon
+      - dropmong-interest
+      - dropmong-notification
+      - dropmong-order
+      - dropmong-payment
+      - dropmong-user
+      - dropmong-web
+
+  tasks:
+    - name: Fetch ECR login password from the operator's AWS SSO session
+      ansible.builtin.command:
+        cmd: >-
+          aws ecr get-login-password
+          --region {{ ecr_registry_region }}
+          --profile {{ ecr_registry_aws_profile }}
+      delegate_to: localhost
+      become: false
+      register: ecr_registry_login
+      changed_when: false
+      no_log: true
+
+    - name: Refresh ecr-registry pull secret in each namespace
+      ansible.builtin.shell: |
+        kubectl -n {{ item }} create secret docker-registry ecr-registry \
+          --docker-server="{{ ecr_registry_host }}" \
+          --docker-username=AWS \
+          --docker-password="${ECR_REGISTRY_LOGIN_PASSWORD}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+      loop: "{{ ecr_registry_namespaces }}"
+      loop_control:
+        label: "{{ item }}"
+      environment:
+        ECR_REGISTRY_LOGIN_PASSWORD: "{{ ecr_registry_login.stdout }}"
+      no_log: true
+
+    - name: Verify ecr-registry secret exists in each namespace
+      ansible.builtin.shell: |
+        kubectl -n {{ item }} get secret ecr-registry -o jsonpath='{.metadata.name}'
+      loop: "{{ ecr_registry_namespaces }}"
+      loop_control:
+        label: "{{ item }}"
+      register: ecr_registry_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Show ecr-registry secret verification results
+      ansible.builtin.debug:
+        msg: "ecr-registry secret is present: {{ item.item }}"
+      loop: "{{ ecr_registry_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.stdout == 'ecr-registry'
+
+    - name: Show missing ecr-registry secret verification results
+      ansible.builtin.debug:
+        msg: "ecr-registry secret is missing: {{ item.item }}"
+      loop: "{{ ecr_registry_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.stdout != 'ecr-registry'

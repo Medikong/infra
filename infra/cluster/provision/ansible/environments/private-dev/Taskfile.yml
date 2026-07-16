@@ -97,7 +97,7 @@ tasks:
     deps:
       - inventory:check
     cmds:
-      - ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/longhorn.yml playbooks/registry.yml playbooks/secrets.yml playbooks/observability-storage.yml {{.CLI_ARGS}}
+      - ansible-playbook {{.ANSIBLE_FLAGS}} {{.ANSIBLE_CONNECTION_ARGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/longhorn.yml playbooks/registry.yml playbooks/secrets.yml playbooks/observability-storage.yml playbooks/ecr-registry-refresh.yml {{.CLI_ARGS}}
 
   private-dev:kubernetes:
     desc: Install and verify the private-dev kubeadm cluster.
@@ -149,6 +149,14 @@ tasks:
       - task: playbook
         vars:
           PLAYBOOK: secrets.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
+  private-dev:ecr-refresh:
+    desc: Refresh the ecr-registry image pull secret using the operator's AWS SSO session (token expires ~12h).
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: ecr-registry-refresh.yml
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   private-dev:bootstrap:
