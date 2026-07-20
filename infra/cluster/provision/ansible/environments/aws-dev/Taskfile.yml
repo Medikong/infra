@@ -110,7 +110,7 @@ tasks:
     deps:
       - inventory:check
     cmds:
-      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-registry-refresh.yml playbooks/verify.yml {{.CLI_ARGS}}
+      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-registry-refresh.yml playbooks/secrets.yml playbooks/verify.yml {{.CLI_ARGS}}
 
   aws-dev:kubernetes:
     desc: Install the aws-dev kubeadm cluster.
@@ -149,6 +149,14 @@ tasks:
       - task: playbook
         vars:
           PLAYBOOK: argocd.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
+  aws-dev:secrets:
+    desc: Generate (idempotent) aws-dev application secrets, e.g. auth-runtime-credentials.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: secrets.yml
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:verify:
