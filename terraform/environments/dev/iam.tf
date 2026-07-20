@@ -28,6 +28,11 @@ resource "aws_iam_role_policy_attachment" "kubernetes_node_ecr_read_only" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_iam_role_policy_attachment" "kubernetes_node_ebs_csi" {
+  role       = aws_iam_role.kubernetes_node.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
 resource "aws_iam_instance_profile" "kubernetes_node" {
   name = "${local.name_prefix}-kubernetes-node-profile"
   role = aws_iam_role.kubernetes_node.name

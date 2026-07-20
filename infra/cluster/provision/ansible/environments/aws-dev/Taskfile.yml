@@ -3,10 +3,10 @@ version: "3"
 env:
   ANSIBLE_CONFIG: ../../ansible.cfg
   OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
-  PATH: '{{.ROOT_DIR}}/.local/ansible-venv/bin:{{.HOME}}/.local/bin:{{.PATH}}'
 
 vars:
   ROOT_DIR: '{{.TASKFILE_DIR}}/../../../../../..'
+  LOCAL_BIN_PREPEND: '{{.ROOT_DIR}}/.local/ansible-venv/bin:{{.ROOT_DIR}}/.local/bin'
   WORKSPACE: '{{default "dev" .WORKSPACE}}'
   ANSIBLE_INVENTORY: '{{default (printf "%s/.local/terraform/%s/inventory.ini" .ROOT_DIR .WORKSPACE) .ANSIBLE_INVENTORY}}'
   ANSIBLE_FLAGS: '{{default "" .ANSIBLE_FLAGS}}'
@@ -23,9 +23,39 @@ tasks:
       - task --list
 
   requirements:install:
-    desc: Install the pinned Ansible collections required by aws-dev.
+    desc: Bootstrap the local ansible-venv (ansible-core, boto3) and install the pinned Ansible collections.
     cmds:
-      - ansible-galaxy collection install -r ../../requirements.yml
+      - |
+        set -eu
+        venv_dir='{{.ROOT_DIR}}/.local/ansible-venv'
+        if [ ! -x "${venv_dir}/bin/ansible-playbook" ]; then
+          python3 -m venv --without-pip "${venv_dir}" 2>/dev/null || python3 -m venv "${venv_dir}"
+          if [ ! -x "${venv_dir}/bin/pip" ]; then
+            curl -sSL https://bootstrap.pypa.io/get-pip.py | "${venv_dir}/bin/python3"
+          fi
+          "${venv_dir}/bin/pip" install --disable-pip-version-check --quiet "ansible-core==2.20.5" "boto3>=1.35.0,<2.0.0"
+        fi
+      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-galaxy collection install -r ../../requirements.yml
+      - |
+        set -eu
+        local_bin='{{.ROOT_DIR}}/.local/bin'
+        mkdir -p "${local_bin}"
+        if ! command -v rg >/dev/null 2>&1 && [ ! -x "${local_bin}/rg" ]; then
+          tmp="$(mktemp -d)"
+          curl -sSL "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz" -o "${tmp}/rg.tar.gz"
+          tar xzf "${tmp}/rg.tar.gz" -C "${tmp}"
+          cp "${tmp}"/ripgrep-*/rg "${local_bin}/rg"
+          chmod +x "${local_bin}/rg"
+          rm -rf "${tmp}"
+        fi
+        if ! command -v session-manager-plugin >/dev/null 2>&1 && [ ! -x "${local_bin}/session-manager-plugin" ]; then
+          tmp="$(mktemp -d)"
+          curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "${tmp}/smp.deb"
+          dpkg-deb -x "${tmp}/smp.deb" "${tmp}/extracted"
+          cp "${tmp}/extracted/usr/local/sessionmanagerplugin/bin/session-manager-plugin" "${local_bin}/session-manager-plugin"
+          chmod +x "${local_bin}/session-manager-plugin"
+          rm -rf "${tmp}"
+        fi
 
   inventory:generate:
     desc: Generate the aws-dev inventory from the selected Terraform workspace.
@@ -37,6 +67,7 @@ tasks:
     cmds:
       - |
         set -eu
+        export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"
         inventory='{{.ANSIBLE_INVENTORY}}'
         test -f "${inventory}" || {
           printf 'Missing Terraform inventory: %s\nRun: task terraform:inventory ENV=dev WORKSPACE=%s\n' "${inventory}" '{{.WORKSPACE}}' >&2
@@ -60,6 +91,7 @@ tasks:
     cmds:
       - |
         set -eu
+        export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"
         if [ -z "${AWS_PROFILE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != 'true' ]; then
           export AWS_PROFILE=dropmong-infra-admin
         fi
@@ -78,7 +110,7 @@ tasks:
     deps:
       - inventory:check
     cmds:
-      - ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/verify.yml {{.CLI_ARGS}}
+      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-registry-refresh.yml playbooks/verify.yml {{.CLI_ARGS}}
 
   aws-dev:kubernetes:
     desc: Install the aws-dev kubeadm cluster.
@@ -102,6 +134,21 @@ tasks:
       - task: playbook
         vars:
           PLAYBOOK: helm.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
+  aws-dev:ecr-refresh:
+    desc: Refresh the ecr-registry image pull secret using the operator's AWS SSO session (token expires ~12h).
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: ecr-registry-refresh.yml
+
+  aws-dev:argocd:
+    desc: Install Argo CD and the aws-dev root Application.
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: argocd.yml
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:verify:
@@ -159,7 +206,22 @@ tasks:
     cmds:
       - |
         set -eu
+        export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"
         if [ -z "${AWS_PROFILE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != 'true' ]; then
           export AWS_PROFILE=dropmong-infra-admin
         fi
         ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' 'playbooks/{{.PLAYBOOK}}' {{.CLI_ARGS}}
+
+  aws-dev:ssh:
+    desc: Open an SSM session to the aws-dev control-plane node.
+    cmds:
+      - |
+        set -eu
+        export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"
+        if [ -z "${AWS_PROFILE:-}" ] && [ "${GITHUB_ACTIONS:-false}" != 'true' ]; then
+          export AWS_PROFILE=dropmong-infra-admin
+        fi
+        instance_id="$(rg -o 'ansible_aws_ssm_instance_id=(i-[a-z0-9]+)' -r '$1' '{{.ANSIBLE_INVENTORY}}' | head -1)"
+        [ -n "${instance_id}" ] || { printf 'Could not find control-plane instance id in %s\n' '{{.ANSIBLE_INVENTORY}}' >&2; exit 2; }
+        region="$(rg -o 'ansible_aws_ssm_region=(\S+)' -r '$1' '{{.ANSIBLE_INVENTORY}}' | head -1)"
+        aws ssm start-session --target "${instance_id}" --region "${region:-ap-northeast-2}"

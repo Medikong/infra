@@ -1,0 +1,99 @@
+---
+- name: Bootstrap Argo CD for aws-dev
+  hosts: "control_plane[0]"
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Check admin kubeconfig
+      ansible.builtin.stat:
+        path: "{{ kubernetes_admin_conf_path }}"
+      register: admin_conf
+
+    - name: Fail when cluster is not initialized
+      ansible.builtin.fail:
+        msg: "Kubernetes admin kubeconfig is missing. Run aws-dev cluster bootstrap first."
+      when: not admin_conf.stat.exists
+
+    - name: Ensure Argo CD namespace exists
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          kubectl create namespace "{{ aws_dev_argocd_namespace }}" --dry-run=client -o yaml | kubectl apply -f -
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: argocd_namespace_apply
+      changed_when: "'created' in argocd_namespace_apply.stdout or 'configured' in argocd_namespace_apply.stdout"
+
+    - name: Install or update Argo CD
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - --server-side
+          - --force-conflicts
+          - -n
+          - "{{ aws_dev_argocd_namespace }}"
+          - -f
+          - "{{ aws_dev_argocd_install_manifest_url }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: argocd_install_apply
+      changed_when: "'created' in argocd_install_apply.stdout or 'configured' in argocd_install_apply.stdout"
+
+    - name: Wait until Argo CD Application CRD is established
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - wait
+          - --for=condition=Established
+          - crd/applications.argoproj.io
+          - "--timeout={{ aws_dev_argocd_controller_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Wait until Argo CD application controller is available
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ aws_dev_argocd_namespace }}"
+          - rollout
+          - status
+          - statefulset/argocd-application-controller
+          - "--timeout={{ aws_dev_argocd_controller_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Wait until Argo CD server is available
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ aws_dev_argocd_namespace }}"
+          - rollout
+          - status
+          - deployment/argocd-server
+          - "--timeout={{ aws_dev_argocd_server_ready_timeout }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      changed_when: false
+
+    - name: Apply aws-dev root Application
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - -n
+          - "{{ aws_dev_argocd_namespace }}"
+          - -f
+          - "{{ aws_dev_argocd_root_application_url }}"
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: aws_dev_root_apply
+      changed_when: "'created' in aws_dev_root_apply.stdout or 'configured' in aws_dev_root_apply.stdout"
