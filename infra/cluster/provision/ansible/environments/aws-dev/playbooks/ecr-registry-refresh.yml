@@ -20,6 +20,9 @@
       - dropmong-payment
       - dropmong-user
       - dropmong-web
+      - observability
+      - loadtest
+      - synthetic
 
   tasks:
     - name: Fetch ECR login password from the operator's AWS SSO session
