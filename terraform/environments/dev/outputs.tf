@@ -13,6 +13,11 @@ output "aws_region" {
   value       = var.aws_region
 }
 
+output "external_secrets_role_arn" {
+  description = "IAM role assumed by External Secrets Operator for scoped AWS Secrets Manager access."
+  value       = aws_iam_role.external_secrets.arn
+}
+
 output "vpc_id" {
   description = "Environment VPC ID."
   value       = aws_vpc.environment.id

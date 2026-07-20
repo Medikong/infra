@@ -114,6 +114,22 @@ run "dev_defaults" {
     error_message = "Kubernetes nodes need public IPv4 for outbound access while NAT is intentionally absent."
   }
 
+  assert {
+    condition     = aws_iam_role.external_secrets.name == "medikong-dev-external-secrets-role"
+    error_message = "AWS dev must use a dedicated External Secrets role."
+  }
+
+  assert {
+    condition = (
+      toset(jsondecode(aws_iam_role_policy.external_secrets_discord_webhook.policy).Statement[0].Action) == toset([
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+      ])
+      && jsondecode(aws_iam_role_policy.external_secrets_discord_webhook.policy).Statement[0].Resource == "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:dropmong/aws-dev/discord/webhook-??????"
+    )
+    error_message = "The External Secrets role must read only the AWS dev Discord webhook secret."
+  }
+
 }
 
 run "reject_over_budget_runtime" {
@@ -148,6 +164,22 @@ run "reject_unpriced_graviton_type" {
 
 run "ssm_access_contract" {
   command = apply
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.external_secrets.assume_role_policy).Statement[0].Action == "sts:AssumeRole"
+      && jsondecode(aws_iam_role.external_secrets.assume_role_policy).Statement[0].Principal.AWS == aws_iam_role.kubernetes_node.arn
+    )
+    error_message = "Only the Kubernetes node role may assume the External Secrets role."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role_policy.kubernetes_node_assume_external_secrets.policy).Statement[0].Action == "sts:AssumeRole"
+      && jsondecode(aws_iam_role_policy.kubernetes_node_assume_external_secrets.policy).Statement[0].Resource == aws_iam_role.external_secrets.arn
+    )
+    error_message = "The Kubernetes node role must only assume the dedicated External Secrets role."
+  }
 
   assert {
     condition = (
