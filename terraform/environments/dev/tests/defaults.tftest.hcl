@@ -120,6 +120,11 @@ run "dev_defaults" {
   }
 
   assert {
+    condition     = aws_iam_role.external_secrets_grafana.name == "medikong-dev-external-secrets-grafana-role"
+    error_message = "AWS dev Grafana must use a Secret-specific External Secrets role."
+  }
+
+  assert {
     condition = (
       toset(jsondecode(aws_iam_role_policy.external_secrets_discord_webhook.policy).Statement[0].Action) == toset([
         "secretsmanager:DescribeSecret",
@@ -128,6 +133,14 @@ run "dev_defaults" {
       && jsondecode(aws_iam_role_policy.external_secrets_discord_webhook.policy).Statement[0].Resource == "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:dropmong/aws-dev/discord/webhook-??????"
     )
     error_message = "The External Secrets role must read only the AWS dev Discord webhook secret."
+  }
+
+  assert {
+    condition = (
+      aws_secretsmanager_secret.grafana_admin.name == "dropmong/aws-dev/monitoring/grafana-admin"
+      && aws_secretsmanager_secret.grafana_admin.recovery_window_in_days == 7
+    )
+    error_message = "AWS dev must manage Grafana break-glass secret metadata without storing a secret value in Terraform."
   }
 
 }
@@ -164,6 +177,27 @@ run "reject_unpriced_graviton_type" {
 
 run "ssm_access_contract" {
   command = apply
+
+  assert {
+    condition = (
+      toset(jsondecode(aws_iam_role_policy.external_secrets_grafana_admin.policy).Statement[0].Action) == toset([
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+      ])
+      && jsondecode(aws_iam_role_policy.external_secrets_grafana_admin.policy).Statement[0].Resource == aws_secretsmanager_secret.grafana_admin.arn
+    )
+    error_message = "The External Secrets role must read only the managed AWS dev Grafana admin secret."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.external_secrets_grafana.assume_role_policy).Statement[0].Action == "sts:AssumeRole"
+      && jsondecode(aws_iam_role.external_secrets_grafana.assume_role_policy).Statement[0].Principal.AWS == aws_iam_role.kubernetes_node.arn
+      && jsondecode(aws_iam_role_policy.kubernetes_node_assume_external_secrets_grafana.policy).Statement[0].Action == "sts:AssumeRole"
+      && jsondecode(aws_iam_role_policy.kubernetes_node_assume_external_secrets_grafana.policy).Statement[0].Resource == aws_iam_role.external_secrets_grafana.arn
+    )
+    error_message = "The Kubernetes node role must only assume the dedicated Grafana External Secrets role."
+  }
 
   assert {
     condition = (

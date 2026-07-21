@@ -84,6 +84,35 @@
         KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
       changed_when: false
 
+    - name: Enable child Application health for app-of-apps sync waves
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          kubectl apply --server-side --field-manager=medikong-bootstrap -f - <<'EOF'
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: argocd-cm
+            namespace: {{ aws_dev_argocd_namespace }}
+          data:
+            resource.customizations.health.argoproj.io_Application: |
+              hs = {}
+              hs.status = "Progressing"
+              hs.message = ""
+              if obj.status ~= nil and obj.status.health ~= nil then
+                hs.status = obj.status.health.status
+                if obj.status.health.message ~= nil then
+                  hs.message = obj.status.health.message
+                end
+              end
+              return hs
+          EOF
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+      register: argocd_application_health_apply
+      changed_when: "'created' in argocd_application_health_apply.stdout or 'configured' in argocd_application_health_apply.stdout"
+
     - name: Apply aws-dev root Application
       ansible.builtin.command:
         argv:

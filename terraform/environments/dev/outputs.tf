@@ -18,6 +18,11 @@ output "external_secrets_role_arn" {
   value       = aws_iam_role.external_secrets.arn
 }
 
+output "grafana_external_secrets_role_arn" {
+  description = "IAM role assumed by External Secrets Operator for the AWS dev Grafana break-glass secret."
+  value       = aws_iam_role.external_secrets_grafana.arn
+}
+
 output "vpc_id" {
   description = "Environment VPC ID."
   value       = aws_vpc.environment.id

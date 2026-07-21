@@ -67,6 +67,40 @@ resource "aws_iam_role_policy" "external_secrets_discord_webhook" {
   })
 }
 
+resource "aws_iam_role" "external_secrets_grafana" {
+  name = "${local.name_prefix}-external-secrets-grafana-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "KubernetesNodes"
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { AWS = aws_iam_role.kubernetes_node.arn }
+    }]
+  })
+
+  tags = {
+    Name = "${local.name_prefix}-external-secrets-grafana-role"
+  }
+}
+
+resource "aws_iam_role_policy" "external_secrets_grafana_admin" {
+  name = "${local.name_prefix}-grafana-admin-read"
+  role = aws_iam_role.external_secrets_grafana.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "ReadAwsDevGrafanaAdmin"
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+      ]
+      Resource = aws_secretsmanager_secret.grafana_admin.arn
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "kubernetes_node_assume_external_secrets" {
   name = "${local.name_prefix}-assume-external-secrets"
   role = aws_iam_role.kubernetes_node.id
@@ -77,6 +111,20 @@ resource "aws_iam_role_policy" "kubernetes_node_assume_external_secrets" {
       Effect   = "Allow"
       Action   = "sts:AssumeRole"
       Resource = aws_iam_role.external_secrets.arn
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "kubernetes_node_assume_external_secrets_grafana" {
+  name = "${local.name_prefix}-assume-external-secrets-grafana"
+  role = aws_iam_role.kubernetes_node.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "AssumeGrafanaExternalSecretsRole"
+      Effect   = "Allow"
+      Action   = "sts:AssumeRole"
+      Resource = aws_iam_role.external_secrets_grafana.arn
     }]
   })
 }
