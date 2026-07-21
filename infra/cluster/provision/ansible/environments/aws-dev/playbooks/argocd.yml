@@ -84,7 +84,7 @@
         KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
       changed_when: false
 
-    - name: Enable child Application health for app-of-apps sync waves
+    - name: Enable ESO child Application health for app-of-apps sync waves
       ansible.builtin.shell:
         cmd: |
           set -euo pipefail
@@ -97,8 +97,20 @@
           data:
             resource.customizations.health.argoproj.io_Application: |
               hs = {}
-              hs.status = "Progressing"
+              hs.status = "Healthy"
               hs.message = ""
+              gatedApplications = {
+                ["external-secrets-aws-dev"] = true,
+                ["external-secrets-monitoring-config-aws-dev"] = true
+              }
+              applicationName = ""
+              if obj.metadata ~= nil and obj.metadata.name ~= nil then
+                applicationName = obj.metadata.name
+              end
+              if gatedApplications[applicationName] ~= true then
+                return hs
+              end
+              hs.status = "Progressing"
               if obj.status ~= nil and obj.status.health ~= nil then
                 hs.status = obj.status.health.status
                 if obj.status.health.message ~= nil then
