@@ -54,9 +54,11 @@ run "foundation_defaults" {
   assert {
     condition = local.github_oidc_subjects == [
       "repo:Medikong/infra:ref:refs/tags/infra-aws-dev-*",
+      "repo:Medikong/infra:ref:refs/tags/infra-aws-worker-lab-*",
       "repo:Medikong/infra:environment:aws-dev",
+      "repo:Medikong/infra:environment:aws-worker-lab",
     ]
-    error_message = "The GitHub deployment role must trust only infrastructure tags and the aws-dev environment."
+    error_message = "The GitHub deployment role must preserve the AWS dev and worker-lab release boundaries."
   }
 
   assert {

@@ -17,7 +17,9 @@ locals {
   ]
   github_oidc_subjects = [
     "repo:${var.github_repository}:ref:refs/tags/infra-aws-dev-*",
+    "repo:${var.github_repository}:ref:refs/tags/infra-aws-worker-lab-*",
     "repo:${var.github_repository}:environment:${var.github_environment}",
+    "repo:${var.github_repository}:environment:aws-worker-lab",
   ]
 
   common_tags = {
