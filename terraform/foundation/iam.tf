@@ -138,6 +138,12 @@ data "aws_iam_policy_document" "github_actions" {
   }
 
   statement {
+    sid       = "GrafanaAdminSecretMetadata"
+    actions   = local.grafana_admin_secret_metadata_actions
+    resources = [local.grafana_admin_secret_arn]
+  }
+
+  statement {
     sid = "KubernetesNodeIam"
     actions = [
       "iam:AddRoleToInstanceProfile",

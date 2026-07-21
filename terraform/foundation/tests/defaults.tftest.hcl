@@ -63,4 +63,22 @@ run "foundation_defaults" {
     condition     = local.ansible_transfer_bucket == "medikong-ansible-transfer-123456789012-ap-northeast-2"
     error_message = "The GitHub deployment role and shared stack must use the same account- and region-specific Ansible transfer bucket name."
   }
+
+  assert {
+    condition = (
+      local.grafana_admin_secret_arn == "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:dropmong/aws-dev/monitoring/grafana-admin-*"
+      && toset(local.grafana_admin_secret_metadata_actions) == toset([
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:ListSecretVersionIds",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource",
+        "secretsmanager:UpdateSecret",
+      ])
+      && !contains(local.grafana_admin_secret_metadata_actions, "secretsmanager:GetSecretValue")
+    )
+    error_message = "The GitHub deployment role must manage only Grafana secret metadata and must not read the secret value."
+  }
 }
