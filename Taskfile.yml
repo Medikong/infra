@@ -132,6 +132,11 @@ tasks:
     cmds:
       - task -d terraform instances:status ENV='{{.ENV}}' WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
 
+  aws-dev:ecr-credential-provider:
+    desc: Install and verify node-native ECR image credentials one aws-dev node at a time.
+    cmds:
+      - task -d infra/cluster/provision/ansible/environments/aws-dev aws-dev:ecr-credential-provider WORKSPACE='{{.WORKSPACE}}' {{if .CLI_ARGS}}-- {{.CLI_ARGS}}{{end}}
+
   terraform:kubernetes:tunnel:
     desc: Proxy the SSM port forward to the private Kubernetes API.
     cmds:

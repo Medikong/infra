@@ -102,7 +102,7 @@ tasks:
     deps:
       - inventory:check
     cmds:
-      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-registry-refresh.yml playbooks/secrets.yml playbooks/verify.yml {{.CLI_ARGS}}
+      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-credential-provider.yml playbooks/secrets.yml playbooks/verify.yml {{.CLI_ARGS}}
 
   aws-dev:kubernetes:
     desc: Install the aws-dev kubeadm cluster.
@@ -128,12 +128,13 @@ tasks:
           PLAYBOOK: helm.yml
           CLI_ARGS: '{{.CLI_ARGS}}'
 
-  aws-dev:ecr-refresh:
-    desc: Refresh the ecr-registry image pull secret using the operator's AWS SSO session (token expires ~12h).
+  aws-dev:ecr-credential-provider:
+    desc: Install and verify node-native ECR image credentials one aws-dev node at a time.
     cmds:
       - task: playbook
         vars:
-          PLAYBOOK: ecr-registry-refresh.yml
+          PLAYBOOK: ecr-credential-provider.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:argocd:
     desc: Install Argo CD and the aws-dev root Application.

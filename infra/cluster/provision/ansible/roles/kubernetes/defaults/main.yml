@@ -11,3 +11,12 @@ bootstrap_marker_path: /etc/cloudnative-cluster-ready
 metrics_server_version: v0.8.1
 metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/download/{{ metrics_server_version }}/components.yaml"
 metrics_server_wait_timeout: 300s
+ecr_credential_provider_enabled: false
+ecr_credential_provider_version: v1.31.7
+ecr_credential_provider_architecture: arm64
+ecr_credential_provider_download_url: "https://artifacts.k8s.io/binaries/cloud-provider-aws/{{ ecr_credential_provider_version }}/linux/{{ ecr_credential_provider_architecture }}/ecr-credential-provider-linux-{{ ecr_credential_provider_architecture }}"
+ecr_credential_provider_checksum: 1980e3a038cb16da48a137743b31fb81de6c0b59fa06c206c2bc20ce0a52f849
+ecr_credential_provider_bin_dir: /usr/local/lib/kubelet-credential-providers
+ecr_credential_provider_binary_path: "{{ ecr_credential_provider_bin_dir }}/ecr-credential-provider"
+ecr_credential_provider_config_path: /etc/kubernetes/ecr-credential-provider.yaml
+ecr_credential_provider_test_image: ""

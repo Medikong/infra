@@ -9,6 +9,8 @@ kubeadm_init_timeout: 600s
 local_registry_enabled: false
 use_upstream_calico_images: true
 aws_ecr_enabled: true
+ecr_credential_provider_enabled: true
+ecr_credential_provider_test_image: 205623789422.dkr.ecr.ap-northeast-2.amazonaws.com/grafana/tempo:2.9.0
 node_local_storage_size_gib: 20
 metrics_server_wait_timeout: 300s
 kubernetes_admin_user: ubuntu

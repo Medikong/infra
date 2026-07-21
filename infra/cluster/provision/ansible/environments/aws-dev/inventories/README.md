@@ -10,6 +10,7 @@ task terraform:inventory ENV=dev WORKSPACE=dev
 task aws-dev:inventory:check WORKSPACE=dev
 task aws-dev:syntax WORKSPACE=dev
 task aws-dev:bootstrap WORKSPACE=dev
+task aws-dev:ecr-credential-provider WORKSPACE=dev
 ```
 
 기본 경로는 `.local/terraform/<workspace>/inventory.ini`입니다. inventory는 EC2 instance ID와 `amazon.aws.aws_ssm` 연결 플러그인을 사용합니다. SSH ProxyCommand, EC2 Key Pair, 공개키와 개인키는 사용하지 않습니다.
@@ -18,4 +19,4 @@ task aws-dev:bootstrap WORKSPACE=dev
 
 `aws_ssm` 연결은 `ansible_user`를 Linux 실행 사용자로 사용하지 않습니다. inventory는 모든 작업을 `sudo`로 root 권한에서 실행하도록 지정하고, Ubuntu 사용자의 kubeconfig 경로는 `kubernetes_admin_user`, `kubernetes_admin_group`, `kubernetes_admin_home`으로 별도 지정합니다.
 
-이 환경은 Terraform의 Ubuntu 24.04 ARM64 노드, ECR read-only instance role, 노드별 20GiB root volume과 local storage 전제를 사용합니다. NAT Gateway, NLB, bastion은 만들지 않으며 노드 인바운드는 인터넷에 공개하지 않습니다.
+이 환경은 Terraform의 Ubuntu 24.04 ARM64 노드, ECR read-only instance role, 노드별 20GiB root volume과 local storage 전제를 사용합니다. kubelet은 ECR Credential Provider를 통해 instance role로 pull 자격 증명을 자동 획득하므로 `ecr-registry` Secret을 만들거나 갱신하지 않습니다. NAT Gateway, NLB, bastion은 만들지 않으며 노드 인바운드는 인터넷에 공개하지 않습니다.

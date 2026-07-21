@@ -1,0 +1,15 @@
+---
+- name: Configure kubelet private node address and credential provider
+  ansible.builtin.copy:
+    dest: /etc/default/kubelet
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      KUBELET_EXTRA_ARGS=--node-ip={{ node_ip | default(ansible_facts["default_ipv4"]["address"] | default(ansible_host, true), true) }}{% if ecr_credential_provider_enabled | bool %} --image-credential-provider-bin-dir={{ ecr_credential_provider_bin_dir }} --image-credential-provider-config={{ ecr_credential_provider_config_path }}{% endif %}
+  notify: Restart kubelet
+
+- name: Enable kubelet
+  ansible.builtin.service:
+    name: kubelet
+    enabled: true

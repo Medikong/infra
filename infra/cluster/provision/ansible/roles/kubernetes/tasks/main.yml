@@ -17,18 +17,12 @@
   ansible.builtin.include_tasks: packages-redhat.yml
   when: ansible_os_family == "RedHat"
 
-- name: Configure kubelet private node address
-  ansible.builtin.copy:
-    dest: /etc/default/kubelet
-    mode: "0644"
-    content: |
-      KUBELET_EXTRA_ARGS=--node-ip={{ node_ip | default(ansible_default_ipv4.address | default(ansible_host, true), true) }}
-  notify: Restart kubelet
+- name: Install ECR credential provider
+  ansible.builtin.include_tasks: ecr-credential-provider.yml
+  when: ecr_credential_provider_enabled | bool
 
-- name: Enable kubelet
-  ansible.builtin.service:
-    name: kubelet
-    enabled: true
+- name: Configure kubelet
+  ansible.builtin.include_tasks: kubelet.yml
 
 - name: Write server bootstrap marker
   ansible.builtin.copy:
