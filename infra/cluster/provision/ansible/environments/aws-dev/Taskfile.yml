@@ -102,7 +102,7 @@ tasks:
     deps:
       - inventory:check
     cmds:
-      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-credential-provider.yml playbooks/secrets.yml playbooks/verify.yml {{.CLI_ARGS}}
+      - export PATH="{{.LOCAL_BIN_PREPEND}}:$PATH"; ansible-playbook {{.ANSIBLE_FLAGS}} -i '{{.ANSIBLE_INVENTORY}}' --syntax-check playbooks/site.yml playbooks/kubernetes.yml playbooks/node-labels.yml playbooks/helm.yml playbooks/argocd.yml playbooks/ecr-credential-provider.yml playbooks/secrets.yml playbooks/k6.yml playbooks/verify.yml {{.CLI_ARGS}}
 
   aws-dev:kubernetes:
     desc: Install the aws-dev kubeadm cluster.
@@ -126,6 +126,14 @@ tasks:
       - task: playbook
         vars:
           PLAYBOOK: helm.yml
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
+  aws-dev:k6:
+    desc: Install k6 on the aws-dev control-plane node (used for canary/blue-green load test demos, not part of site.yml).
+    cmds:
+      - task: playbook
+        vars:
+          PLAYBOOK: k6.yml
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   aws-dev:ecr-credential-provider:

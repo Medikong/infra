@@ -1,0 +1,10 @@
+---
+k6_version: v0.55.0
+k6_arch: arm64
+k6_checksums:
+  arm64: de505b57f0de37f715f598178c43dc856a19fb90d6d549a65ea730bb3b6c9216
+  amd64: 47a43a8dbb4c1f5d5bd7b8ed6a1b8c83b35546acf989b78400b4e6ce3adaf628
+k6_download_url: "https://github.com/grafana/k6/releases/download/{{ k6_version }}/k6-{{ k6_version }}-linux-{{ k6_arch }}.tar.gz"
+k6_download_dest: "/tmp/k6-{{ k6_version }}-linux-{{ k6_arch }}.tar.gz"
+k6_extract_dir: "/tmp/k6-{{ k6_version }}-linux-{{ k6_arch }}"
+k6_install_path: /usr/local/bin/k6

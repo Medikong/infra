@@ -1,0 +1,42 @@
+---
+- name: Check k6 version
+  ansible.builtin.command:
+    argv:
+      - k6
+      - version
+  register: k6_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Download and install k6
+  when: k6_version_check.rc != 0 or k6_version not in k6_version_check.stdout
+  block:
+    - name: Download pinned k6 release archive
+      ansible.builtin.get_url:
+        url: "{{ k6_download_url }}"
+        dest: "{{ k6_download_dest }}"
+        checksum: "sha256:{{ k6_checksums[k6_arch] }}"
+        mode: "0644"
+
+    - name: Extract k6 release archive
+      ansible.builtin.unarchive:
+        src: "{{ k6_download_dest }}"
+        dest: /tmp
+        remote_src: true
+
+    - name: Install k6 binary
+      ansible.builtin.copy:
+        src: "{{ k6_extract_dir }}/k6"
+        dest: "{{ k6_install_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+
+- name: Verify k6 is installed
+  ansible.builtin.command:
+    argv:
+      - k6
+      - version
+  register: k6_installed_version
+  changed_when: false
