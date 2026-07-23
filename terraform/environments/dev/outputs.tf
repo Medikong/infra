@@ -33,6 +33,16 @@ output "public_subnet_ids" {
   value       = { for availability_zone, subnet in aws_subnet.public : availability_zone => subnet.id }
 }
 
+output "grafana_nlb_dns_name" {
+  description = "AWS-generated DNS name for the temporary public Grafana NLB."
+  value       = aws_lb.grafana.dns_name
+}
+
+output "grafana_public_url" {
+  description = "Temporary public HTTP URL for Grafana. Remove the NLB after the presentation window."
+  value       = "http://${aws_lb.grafana.dns_name}/grafana/"
+}
+
 output "kubernetes_nodes" {
   description = "Kubernetes node addresses and placement."
   value = {
@@ -58,29 +68,34 @@ output "managed_instance_ids" {
 output "estimated_ten_day_cost" {
   description = "Static Seoul-region estimate for the configured runtime and retained gp3 capacity. KRW values include VAT; the separate reserve covers unmodeled variable costs."
   value = {
-    budget_krw                = var.budget_limit_krw
-    variable_reserve_krw      = var.variable_cost_reserve_krw
-    modeled_ceiling_krw       = var.budget_limit_krw - var.variable_cost_reserve_krw
-    exchange_rate_krw_per_usd = var.budget_exchange_rate_krw_per_usd
-    vat_rate                  = var.vat_rate
-    compute_usd               = tonumber(format("%.3f", local.estimated_compute_cost_usd))
-    public_ipv4_usd           = tonumber(format("%.3f", local.estimated_public_ipv4_cost_usd))
-    storage_usd               = tonumber(format("%.3f", local.estimated_storage_cost_usd))
-    subtotal_usd              = tonumber(format("%.3f", local.estimated_total_cost_usd))
-    subtotal_krw              = tonumber(format("%.2f", local.estimated_subtotal_krw))
-    vat_krw                   = tonumber(format("%.2f", local.estimated_vat_krw))
-    billed_cost_krw           = local.estimated_billed_cost_krw
-    remaining_krw             = var.budget_limit_krw - local.estimated_billed_cost_krw
-    unallocated_modeled_krw   = var.budget_limit_krw - var.variable_cost_reserve_krw - local.estimated_billed_cost_krw
-    runtime_hours             = local.runtime_hours
-    retained_hours            = local.calendar_hours
-    runtime_days              = var.runtime_days
-    retention_days            = var.retention_days
-    root_volume_gib           = local.root_volume_size_gib
-    total_volume_gib          = local.total_volume_size_gib
-    price_publication_utc     = "2026-07-10T14:43:55Z"
-    fx_reference_date         = "2026-07-10"
-    fx_reference_krw_per_usd  = 1504.2
+    budget_krw                        = var.budget_limit_krw
+    variable_reserve_krw              = var.variable_cost_reserve_krw
+    modeled_ceiling_krw               = var.budget_limit_krw - var.variable_cost_reserve_krw
+    exchange_rate_krw_per_usd         = var.budget_exchange_rate_krw_per_usd
+    vat_rate                          = var.vat_rate
+    compute_usd                       = tonumber(format("%.3f", local.estimated_compute_cost_usd))
+    public_ipv4_usd                   = tonumber(format("%.3f", local.estimated_public_ipv4_cost_usd))
+    storage_usd                       = tonumber(format("%.3f", local.estimated_storage_cost_usd))
+    grafana_nlb_usd                   = tonumber(format("%.3f", local.estimated_grafana_nlb_cost_usd))
+    grafana_nlb_hourly_usd            = local.grafana_nlb_hour_price_usd
+    grafana_nlcu_hourly_usd           = local.grafana_nlcu_hour_price_usd
+    subtotal_usd                      = tonumber(format("%.3f", local.estimated_total_cost_usd))
+    subtotal_krw                      = tonumber(format("%.2f", local.estimated_subtotal_krw))
+    vat_krw                           = tonumber(format("%.2f", local.estimated_vat_krw))
+    billed_cost_krw                   = local.estimated_billed_cost_krw
+    remaining_krw                     = var.budget_limit_krw - local.estimated_billed_cost_krw
+    unallocated_modeled_krw           = var.budget_limit_krw - var.variable_cost_reserve_krw - local.estimated_billed_cost_krw
+    runtime_hours                     = local.runtime_hours
+    retained_hours                    = local.calendar_hours
+    grafana_nlb_retained_hours        = var.grafana_nlb_retention_hours
+    runtime_days                      = var.runtime_days
+    retention_days                    = var.retention_days
+    root_volume_gib                   = local.root_volume_size_gib
+    total_volume_gib                  = local.total_volume_size_gib
+    price_publication_utc             = "2026-07-10T14:43:55Z"
+    grafana_nlb_price_publication_utc = "2026-07-20T18:49:50Z"
+    fx_reference_date                 = "2026-07-10"
+    fx_reference_krw_per_usd          = 1504.2
   }
 }
 

@@ -11,9 +11,11 @@ locals {
     "r6g.large"  = 0.1220
   }
 
-  gp3_gib_month_price_usd    = 0.0912
-  public_ipv4_hour_price_usd = 0.005
-  price_month_hours          = 720
+  gp3_gib_month_price_usd     = 0.0912
+  public_ipv4_hour_price_usd  = 0.005
+  grafana_nlb_hour_price_usd  = 0.0225
+  grafana_nlcu_hour_price_usd = 0.006
+  price_month_hours           = 720
 
   runtime_hours  = var.daily_runtime_hours * var.runtime_days
   calendar_hours = var.retention_days * 24
@@ -36,10 +38,15 @@ locals {
     * local.calendar_hours
     / local.price_month_hours
   )
+  estimated_grafana_nlb_cost_usd = (
+    local.grafana_nlb_hour_price_usd
+    * var.grafana_nlb_retention_hours
+  )
   estimated_total_cost_usd = (
     local.estimated_compute_cost_usd
     + local.estimated_public_ipv4_cost_usd
     + local.estimated_storage_cost_usd
+    + local.estimated_grafana_nlb_cost_usd
   )
 
   estimated_subtotal_krw = (
@@ -48,7 +55,7 @@ locals {
   )
   estimated_vat_krw = local.estimated_subtotal_krw * var.vat_rate
   estimated_billed_cost_krw = ceil(
-    local.estimated_subtotal_krw + local.estimated_vat_krw
+    tonumber(format("%.2f", local.estimated_subtotal_krw + local.estimated_vat_krw))
   )
 }
 
@@ -72,6 +79,11 @@ resource "terraform_data" "budget_guard" {
     precondition {
       condition     = var.retention_days >= var.runtime_days
       error_message = "retention_days must be greater than or equal to runtime_days."
+    }
+
+    precondition {
+      condition     = var.grafana_nlb_retention_hours <= local.calendar_hours
+      error_message = "grafana_nlb_retention_hours must stay inside the modeled environment retention window."
     }
 
     precondition {

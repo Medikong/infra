@@ -57,6 +57,23 @@ variable "public_subnet_cidrs" {
   }
 }
 
+variable "grafana_nlb_listener_enabled" {
+  description = "Create the temporary public Grafana TCP/80 listener. Keep false until the dedicated Istio route is healthy."
+  type        = bool
+  default     = false
+}
+
+variable "grafana_nlb_retention_hours" {
+  description = "Planned hours from NLB creation through removal. The NLB incurs hourly cost even while its listener is disabled."
+  type        = number
+  default     = 72
+
+  validation {
+    condition     = var.grafana_nlb_retention_hours > 0 && floor(var.grafana_nlb_retention_hours) == var.grafana_nlb_retention_hours
+    error_message = "grafana_nlb_retention_hours must be a positive whole number."
+  }
+}
+
 variable "ubuntu_arm64_ami_ssm_parameter" {
   description = "Canonical SSM public parameter for the current Ubuntu 24.04 ARM64 AMI."
   type        = string
@@ -213,7 +230,7 @@ variable "vat_rate" {
 }
 
 variable "variable_cost_reserve_krw" {
-  description = "VAT-inclusive KRW reserve for transfer, ECR, snapshots, and exchange-rate drift."
+  description = "VAT-inclusive KRW reserve for transfer, NLB capacity units, ECR, snapshots, and exchange-rate drift."
   type        = number
   default     = 10000
 

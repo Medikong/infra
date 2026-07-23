@@ -1,4 +1,23 @@
 mock_provider "aws" {
+  mock_resource "aws_instance" {
+    defaults = {
+      id = "i-0123456789abcdef0"
+    }
+  }
+
+  mock_resource "aws_lb" {
+    defaults = {
+      arn      = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/medikong-dev-grafana/0123456789abcdef"
+      dns_name = "medikong-dev-grafana-0123456789abcdef.elb.ap-northeast-2.amazonaws.com"
+    }
+  }
+
+  mock_resource "aws_lb_target_group" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/medikong-dev-grafana/0123456789abcdef"
+    }
+  }
+
   mock_data "aws_caller_identity" {
     defaults = {
       account_id = "123456789012"
@@ -84,22 +103,29 @@ run "dev_defaults" {
   }
 
   assert {
-    condition     = abs(output.estimated_ten_day_cost.subtotal_usd - 47.658) < 0.001
-    error_message = "The default AWS-denominated subtotal must be USD 47.658."
+    condition = (
+      abs(output.estimated_ten_day_cost.subtotal_usd - 49.278) < 0.001
+      && abs(output.estimated_ten_day_cost.grafana_nlb_usd - 1.620) < 0.001
+    )
+    error_message = "The default AWS-denominated subtotal must include USD 1.620 for the temporary Grafana NLB."
   }
 
   assert {
     condition = (
-      output.estimated_ten_day_cost.billed_cost_krw == 83878
+      output.estimated_ten_day_cost.billed_cost_krw == 86729
       && output.estimated_ten_day_cost.variable_reserve_krw == 10000
-      && output.estimated_ten_day_cost.unallocated_modeled_krw == 6122
+      && output.estimated_ten_day_cost.unallocated_modeled_krw == 3271
     )
     error_message = "The VAT-inclusive estimate plus KRW 10,000 reserve must remain below KRW 100,000."
   }
 
   assert {
-    condition     = output.estimated_ten_day_cost.runtime_hours == 100 && output.estimated_ten_day_cost.retained_hours == 504
-    error_message = "The default budget must model 10 active days inside a three-week retained environment."
+    condition = (
+      output.estimated_ten_day_cost.runtime_hours == 100
+      && output.estimated_ten_day_cost.retained_hours == 504
+      && output.estimated_ten_day_cost.grafana_nlb_retained_hours == 72
+    )
+    error_message = "The default budget must model 10 active days, three retained weeks, and NLB removal after 72 hours."
   }
 
   assert {
