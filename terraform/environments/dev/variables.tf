@@ -58,9 +58,9 @@ variable "public_subnet_cidrs" {
 }
 
 variable "grafana_nlb_listener_enabled" {
-  description = "Create the temporary public Grafana TCP/80 listener. Keep false until the dedicated Istio route is healthy."
+  description = "Create the temporary public Grafana TCP/80 listener now that the dedicated Istio route is healthy."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "grafana_nlb_retention_hours" {

@@ -46,7 +46,7 @@ mock_provider "aws" {
   }
 }
 
-run "grafana_nlb_safe_default" {
+run "grafana_nlb_public_listener_default" {
   command = plan
 
   assert {
@@ -60,8 +60,14 @@ run "grafana_nlb_safe_default" {
   }
 
   assert {
-    condition     = length(aws_lb_listener.grafana_http) == 0
-    error_message = "The safe default must not create a public Grafana listener."
+    condition = (
+      length(aws_lb_listener.grafana_http) == 1
+      && aws_lb_listener.grafana_http[0].protocol == "TCP"
+      && aws_lb_listener.grafana_http[0].port == 80
+      && aws_lb_listener.grafana_http[0].port != 32080
+      && aws_lb_listener.grafana_http[0].default_action[0].target_group_arn == aws_lb_target_group.grafana.arn
+    )
+    error_message = "The default must create exactly one public TCP/80 listener for Grafana and must not expose NodePort 32080."
   }
 
   assert {
