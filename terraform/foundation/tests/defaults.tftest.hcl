@@ -85,18 +85,45 @@ run "foundation_defaults" {
   }
 }
 
-run "github_deployer_can_read_nlb_state" {
+run "github_deployer_can_manage_grafana_nlb_lifecycle" {
   command = plan
 
   assert {
     condition = length([
       for statement in data.aws_iam_policy_document.github_actions.statement : statement
-      if statement.sid == "ElasticLoadBalancingStateReads"
+      if statement.sid == "ElasticLoadBalancingLifecycle"
+      && length(statement.actions) == 24
+      && alltrue([
+        for action in statement.actions : startswith(action, "elasticloadbalancing:")
+      ])
+      && !contains(statement.actions, "elasticloadbalancing:*")
       && toset(statement.actions) == toset([
+        "elasticloadbalancing:AddTags",
+        "elasticloadbalancing:CreateListener",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:CreateTargetGroup",
+        "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:DeregisterTargets",
+        "elasticloadbalancing:DescribeListenerAttributes",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
         "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTags",
+        "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeTargetHealth",
+        "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:ModifyListenerAttributes",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:RegisterTargets",
+        "elasticloadbalancing:RemoveTags",
+        "elasticloadbalancing:SetSecurityGroups",
       ])
     ]) == 1
-    error_message = "The GitHub deployment role must grant exactly the two ELB read actions Terraform needs to refresh NLB and target-group state."
+    error_message = "The GitHub deployment role must grant exactly the 24 explicit ELBv2 lifecycle actions required by the Grafana NLB, with no omission, extra action, wildcard, or action from another service."
   }
 }
