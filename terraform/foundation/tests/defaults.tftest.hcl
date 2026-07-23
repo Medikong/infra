@@ -84,3 +84,19 @@ run "foundation_defaults" {
     error_message = "The GitHub deployment role must manage only Grafana secret metadata and must not read the secret value."
   }
 }
+
+run "github_deployer_can_read_nlb_state" {
+  command = plan
+
+  assert {
+    condition = length([
+      for statement in data.aws_iam_policy_document.github_actions.statement : statement
+      if statement.sid == "ElasticLoadBalancingStateReads"
+      && toset(statement.actions) == toset([
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTargetGroups",
+      ])
+    ]) == 1
+    error_message = "The GitHub deployment role must grant exactly the two ELB read actions Terraform needs to refresh NLB and target-group state."
+  }
+}

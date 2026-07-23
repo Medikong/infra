@@ -114,6 +114,15 @@ data "aws_iam_policy_document" "github_actions" {
   }
 
   statement {
+    sid = "ElasticLoadBalancingStateReads"
+    actions = [
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeTargetGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid = "EcrRepositories"
     actions = [
       "ecr:CreateRepository",
