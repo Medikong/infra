@@ -9,6 +9,58 @@
     that: metrics_admin_conf.stat.exists
     fail_msg: Kubernetes admin kubeconfig is missing.
 
+- name: Inspect existing Metrics Server Deployment selector
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - -n
+      - kube-system
+      - get
+      - deployment
+      - metrics-server
+      - --ignore-not-found=true
+      - -o
+      - json
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: metrics_server_existing
+  changed_when: false
+  failed_when: metrics_server_existing.rc != 0
+
+- name: Parse existing Metrics Server Deployment selector
+  ansible.builtin.set_fact:
+    metrics_server_existing_selector: >-
+      {{
+        ((metrics_server_existing.stdout | from_json).spec.selector.matchLabels | default({}))
+        if (metrics_server_existing.stdout | trim | length > 0)
+        else {}
+      }}
+
+- name: Detect incompatible Metrics Server Deployment selector
+  ansible.builtin.set_fact:
+    metrics_server_selector_mismatch: >-
+      {{
+        (metrics_server_existing.stdout | trim | length > 0)
+        and (metrics_server_existing_selector != metrics_server_deployment_selector)
+      }}
+
+- name: Remove Metrics Server Deployment when selector is incompatible
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - -n
+      - kube-system
+      - delete
+      - deployment
+      - metrics-server
+      - --ignore-not-found=true
+      - --wait=true
+  environment:
+    KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
+  register: metrics_server_cleanup
+  changed_when: "'deleted' in metrics_server_cleanup.stdout"
+  when: metrics_server_selector_mismatch | bool
+
 - name: Install Metrics Server
   ansible.builtin.command:
     argv:

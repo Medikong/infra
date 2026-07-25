@@ -10,6 +10,8 @@ crictl_config_path: /etc/crictl.yaml
 bootstrap_marker_path: /etc/cloudnative-cluster-ready
 metrics_server_version: v0.8.1
 metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/download/{{ metrics_server_version }}/components.yaml"
+metrics_server_deployment_selector:
+  k8s-app: metrics-server
 metrics_server_wait_timeout: 300s
 ecr_credential_provider_enabled: false
 ecr_credential_provider_version: v1.31.7
