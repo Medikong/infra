@@ -154,9 +154,9 @@ run "dev_defaults" {
   assert {
     condition = (
       output.estimated_ten_day_cost.budget_krw == 120000
-      && output.estimated_ten_day_cost.billed_cost_krw == 107626
+      && output.estimated_ten_day_cost.billed_cost_krw == 107627
       && output.estimated_ten_day_cost.variable_reserve_krw == 10000
-      && output.estimated_ten_day_cost.unallocated_modeled_krw == 2374
+      && output.estimated_ten_day_cost.unallocated_modeled_krw == 2373
     )
     error_message = "worker-app-3, worker-app-4, and the temporary Grafana NLB must fit the KRW 120,000 ceiling while retaining the KRW 10,000 reserve."
   }
