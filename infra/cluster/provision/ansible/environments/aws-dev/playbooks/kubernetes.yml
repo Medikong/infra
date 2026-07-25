@@ -65,7 +65,8 @@
       ansible.builtin.include_role:
         name: cni
         tasks_from: ready
-    - name: Install Kubernetes metrics services
+    - name: Configure Kubernetes metrics services when not GitOps-managed
       ansible.builtin.include_role:
         name: kubernetes
         tasks_from: metrics
+      when: not (metrics_server_managed_by_gitops | bool)
