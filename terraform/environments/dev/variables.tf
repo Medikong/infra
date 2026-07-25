@@ -197,9 +197,9 @@ variable "observability_worker_volume_size" {
 }
 
 variable "budget_limit_krw" {
-  description = "Maximum VAT-inclusive AWS bill for one dev workspace."
+  description = "Maximum VAT-inclusive AWS bill for one dev workspace. Temporarily KRW 110,000 for worker-app-3 through 2026-07-28 KST."
   type        = number
-  default     = 100000
+  default     = 110000
 
   validation {
     condition     = var.budget_limit_krw > 0

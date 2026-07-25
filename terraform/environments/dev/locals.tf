@@ -55,6 +55,17 @@ locals {
       node_labels       = "role=app medikong.io/workload=app"
       node_taints       = ""
     }
+    # Temporary purchase-test capacity. Remove with the KRW 110,000 budget
+    # exception no later than 2026-07-28 KST.
+    worker-app-3 = {
+      availability_zone = var.availability_zones[0]
+      instance_type     = var.app_worker_instance_types[0]
+      volume_size       = var.app_worker_volume_sizes[0]
+      role              = "worker"
+      workload          = "app"
+      node_labels       = "role=app medikong.io/workload=app"
+      node_taints       = ""
+    }
     worker-data-1 = {
       availability_zone = var.availability_zones[1]
       instance_type     = var.data_worker_instance_types[0]
