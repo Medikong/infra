@@ -53,8 +53,8 @@ run "dev_defaults" {
   }
 
   assert {
-    condition     = length(aws_instance.kubernetes) == 8
-    error_message = "The temporary dev Kubernetes cluster must have one control plane and seven workers."
+    condition     = length(aws_instance.kubernetes) == 9
+    error_message = "The temporary dev Kubernetes cluster must have one control plane and eight workers."
   }
 
   assert {
@@ -64,11 +64,12 @@ run "dev_defaults" {
       "worker-app-1",
       "worker-app-2",
       "worker-app-3",
+      "worker-app-4",
       "worker-data-1",
       "worker-data-2",
       "worker-observability-1",
     ])
-    error_message = "The temporary capacity exception must add only worker-app-3 to the established seven-node topology."
+    error_message = "The temporary capacity exception must add only worker-app-3 and worker-app-4 to the established seven-node topology."
   }
 
   assert {
@@ -76,11 +77,11 @@ run "dev_defaults" {
       for availability_zone in var.availability_zones : availability_zone =>
       length([for node in aws_instance.kubernetes : node if node.availability_zone == availability_zone])
       } == {
-      (var.availability_zones[0]) = 4
+      (var.availability_zones[0]) = 5
       (var.availability_zones[1]) = 2
       (var.availability_zones[2]) = 2
     }
-    error_message = "The eight Kubernetes nodes must place worker-app-3 in the first availability zone without moving existing nodes."
+    error_message = "The nine Kubernetes nodes must place worker-app-3 and worker-app-4 in the first availability zone without moving existing nodes."
   }
 
   assert {
@@ -95,7 +96,7 @@ run "dev_defaults" {
 
   assert {
     condition = alltrue([
-      for name in ["worker-app-1", "worker-app-2", "worker-app-3", "worker-data-1", "worker-data-2"] :
+      for name in ["worker-app-1", "worker-app-2", "worker-app-3", "worker-app-4", "worker-data-1", "worker-data-2"] :
       aws_instance.kubernetes[name].instance_type == "t4g.medium"
     ])
     error_message = "The application and data workers must be t4g.medium."
@@ -115,6 +116,19 @@ run "dev_defaults" {
   }
 
   assert {
+    condition = (
+      local.kubernetes_nodes["worker-app-4"].availability_zone == var.availability_zones[0]
+      && local.kubernetes_nodes["worker-app-4"].instance_type == var.app_worker_instance_types[0]
+      && local.kubernetes_nodes["worker-app-4"].volume_size == var.app_worker_volume_sizes[0]
+      && local.kubernetes_nodes["worker-app-4"].role == "worker"
+      && local.kubernetes_nodes["worker-app-4"].workload == "app"
+      && local.kubernetes_nodes["worker-app-4"].node_labels == "role=app medikong.io/workload=app"
+      && local.kubernetes_nodes["worker-app-4"].node_taints == ""
+    )
+    error_message = "worker-app-4 must match worker-app-3's small app-worker and scheduling contract."
+  }
+
+  assert {
     condition     = aws_instance.kubernetes["worker-observability-1"].instance_type == "r6g.medium"
     error_message = "The dedicated observability worker must be r6g.medium."
   }
@@ -131,20 +145,20 @@ run "dev_defaults" {
 
   assert {
     condition = (
-      abs(output.estimated_ten_day_cost.subtotal_usd - 55.214) < 0.001
+      abs(output.estimated_ten_day_cost.subtotal_usd - 61.151) < 0.001
       && abs(output.estimated_ten_day_cost.grafana_nlb_usd - 1.620) < 0.001
     )
-    error_message = "The temporary eight-node AWS-denominated subtotal must include USD 1.620 for the temporary Grafana NLB."
+    error_message = "The temporary nine-node AWS-denominated subtotal must include USD 1.620 for the temporary Grafana NLB."
   }
 
   assert {
     condition = (
-      output.estimated_ten_day_cost.budget_krw == 110000
-      && output.estimated_ten_day_cost.billed_cost_krw == 97178
+      output.estimated_ten_day_cost.budget_krw == 120000
+      && output.estimated_ten_day_cost.billed_cost_krw == 107626
       && output.estimated_ten_day_cost.variable_reserve_krw == 10000
-      && output.estimated_ten_day_cost.unallocated_modeled_krw == 2822
+      && output.estimated_ten_day_cost.unallocated_modeled_krw == 2374
     )
-    error_message = "worker-app-3 and the temporary Grafana NLB must fit the KRW 110,000 ceiling while retaining the KRW 10,000 reserve."
+    error_message = "worker-app-3, worker-app-4, and the temporary Grafana NLB must fit the KRW 120,000 ceiling while retaining the KRW 10,000 reserve."
   }
 
   assert {
@@ -157,8 +171,8 @@ run "dev_defaults" {
   }
 
   assert {
-    condition     = output.estimated_ten_day_cost.root_volume_gib == 160 && output.estimated_ten_day_cost.total_volume_gib == 160
-    error_message = "The temporary budget must include exactly eight 20 GiB node root volumes."
+    condition     = output.estimated_ten_day_cost.root_volume_gib == 180 && output.estimated_ten_day_cost.total_volume_gib == 180
+    error_message = "The temporary budget must include exactly nine 20 GiB node root volumes."
   }
 
   assert {
@@ -280,6 +294,7 @@ run "ssm_access_contract" {
       && !strcontains(output.ansible_inventory, "ansible_ssh_private_key_file")
       && !strcontains(output.ansible_inventory, "ansible_user=")
       && strcontains(output.ansible_inventory, "worker-app-3 ansible_host=")
+      && strcontains(output.ansible_inventory, "worker-app-4 ansible_host=")
       && strcontains(output.control_plane_ssm_tunnel_command, "AWS-StartPortForwardingSession")
     )
     error_message = "Node administration must use the native amazon.aws.aws_ssm connection with its dedicated transfer bucket and explicit root become."

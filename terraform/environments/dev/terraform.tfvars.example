@@ -25,13 +25,14 @@ app_worker_volume_sizes          = [20, 20]
 data_worker_volume_sizes         = [20, 20]
 observability_worker_volume_size = 20
 
-# Run EC2 for 10 hours/day on 10 active days, while retaining the eight
+# Run EC2 for 10 hours/day on 10 active days, while retaining the nine
 # 20 GiB node root volumes for the original 3-week window. Dev database and
 # LGTM data use node-local capacity, so no additional workload EBS is modeled.
 # The stress exchange rate is intentionally higher than the 2026-07-10 IMF
-# representative rate. The KRW 110,000 ceiling is a temporary worker-app-3
-# exception; remove the node and restore KRW 100,000 no later than 2026-07-28 KST.
-budget_limit_krw                   = 110000
+# representative rate. The KRW 120,000 ceiling is a temporary worker-app-3
+# and worker-app-4 exception; remove both nodes and restore KRW 110,000 no later
+# than 2026-07-28 KST.
+budget_limit_krw                   = 120000
 budget_exchange_rate_krw_per_usd  = 1600
 vat_rate                           = 0.10
 variable_cost_reserve_krw          = 10000
