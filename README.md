@@ -56,7 +56,7 @@ task private-dev:bootstrap
 
 아래 내용은 현재 AWS 계정의 배포 상태가 아니라 `terraform/environments/dev`를 적용할 때 생성되는 기본 구성입니다.
 
-![DropMong AWS dev infrastructure architecture](terraform/diagrams/aws-dev-architecture-overview.png)
+![DropMong AWS dev infrastructure architecture](assets/dropmong-aws-dev-kubernetes-architecture-no-title.png)
 
 | 구분 | 구성 |
 | --- | --- |
